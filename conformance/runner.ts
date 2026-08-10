@@ -26,6 +26,10 @@ import {
   type ProviderCapability,
 } from '../src/capability'
 import {
+  ResponseDegradationError,
+  type ResponseDegradationOptions,
+} from '../src/degradation'
+import {
   OpenAIResponsesCodec,
   OpenAIResponsesProtocolError,
   type OpenAIResponsesCodecConfig,
@@ -300,6 +304,19 @@ function responsesEvents(input: JsonObject): OpenAIResponsesSseEvent[] {
   }))
 }
 
+function degradationOptions(input: JsonObject): ResponseDegradationOptions {
+  const value = input.degradation
+  if (!isRecord(value)) return {}
+  return {
+    ...(typeof value.thinkingTokenBudget === 'number'
+      ? { thinkingTokenBudget: value.thinkingTokenBudget }
+      : {}),
+    ...(typeof value.thinkingTokens === 'number'
+      ? { thinkingTokens: value.thinkingTokens }
+      : {}),
+  }
+}
+
 function sseEvents(input: JsonObject): AnthropicSseEvent[] {
   if (!Array.isArray(input.events)) {
     throw new Error('stream case 缺少 input.events')
@@ -321,6 +338,16 @@ function normalizeError(error: unknown): JsonValue {
       },
       'AnthropicRefusalError',
     )
+  }
+  if (error instanceof ResponseDegradationError) {
+    return {
+      error: {
+        name: error.name,
+        code: error.code,
+        stopReason: error.stopReason,
+        usage: toJsonValue(error.usage, 'ResponseDegradationError.usage'),
+      },
+    }
   }
   if (error instanceof AnthropicProtocolError) {
     return { error: { name: error.name, code: error.code } }
@@ -399,7 +426,10 @@ export async function runConformanceCase(
       }
       case 'anthropic-decode': {
         const codec = new AnthropicMessagesCodec(anthropicCodecConfig(item.input))
-        actual = toJsonValue(codec.decode(item.input.response), `${item.name}.actual`)
+        actual = toJsonValue(
+          codec.decode(item.input.response, degradationOptions(item.input)),
+          `${item.name}.actual`,
+        )
         break
       }
       case 'anthropic-decode-stability': {
@@ -425,7 +455,10 @@ export async function runConformanceCase(
       case 'anthropic-decode-stream': {
         const codec = new AnthropicMessagesCodec(anthropicCodecConfig(item.input))
         actual = toJsonValue(
-          codec.decodeStream(sseEvents(item.input)),
+          codec.decodeStream(
+            sseEvents(item.input),
+            degradationOptions(item.input),
+          ),
           `${item.name}.actual`,
         )
         break
@@ -458,7 +491,10 @@ export async function runConformanceCase(
         const codec = new OpenAIChatCompletionsCodec(
           openAIChatCodecConfig(item.input),
         )
-        actual = toJsonValue(codec.decode(item.input.response), `${item.name}.actual`)
+        actual = toJsonValue(
+          codec.decode(item.input.response, degradationOptions(item.input)),
+          `${item.name}.actual`,
+        )
         break
       }
       case 'openai-chat-decode-stability': {
@@ -523,7 +559,10 @@ export async function runConformanceCase(
           openAIResponsesCodecConfig(item.input),
         )
         actual = toJsonValue(
-          codec.decodeStream(responsesEvents(item.input)),
+          codec.decodeStream(
+            responsesEvents(item.input),
+            degradationOptions(item.input),
+          ),
           `${item.name}.actual`,
         )
         break

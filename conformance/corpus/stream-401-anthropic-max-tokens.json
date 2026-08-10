@@ -1,0 +1,46 @@
+{
+  "name": "I10 Anthropic 真实流在 thinking 中触及 max tokens",
+  "category": "stream",
+  "operation": "anthropic-decode-stream",
+  "recorded": true,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key"
+    },
+    "events": [
+      { "event": "message_start", "data": { "type": "message_start", "message": { "content": [], "stop_reason": null, "usage": { "input_tokens": 98, "output_tokens": 0 } } } },
+      { "event": "content_block_start", "data": { "type": "content_block_start", "index": 0, "content_block": { "type": "thinking", "thinking": "", "signature": "" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "r" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "signature_delta", "signature": "signature-a" } } },
+      { "event": "content_block_stop", "data": { "type": "content_block_stop", "index": 0 } },
+      { "event": "message_delta", "data": { "type": "message_delta", "delta": { "stop_reason": "max_tokens" }, "usage": { "output_tokens": 16 } } },
+      { "event": "message_stop", "data": { "type": "message_stop" } }
+    ]
+  },
+  "expected": {
+    "error": {
+      "name": "ResponseDegradationError",
+      "code": "max_tokens",
+      "stopReason": "max_tokens",
+      "usage": { "totalInputTokens": 98, "outputTokens": 16, "reliable": true }
+    }
+  }
+}

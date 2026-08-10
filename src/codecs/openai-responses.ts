@@ -7,6 +7,15 @@ import {
   type ProviderCapability,
 } from '../capability'
 import { cleanWireModelId } from '../model'
+import {
+  assertResponseNotDegraded,
+  type ResponseDegradationOptions,
+  type StreamObservation,
+} from '../degradation'
+import {
+  writeRequestDiagnostic,
+  type RequestDiagnosticWriter,
+} from '../diagnostic'
 import type {
   AssistantBlock,
   AssistantMessage,
@@ -45,6 +54,8 @@ export interface OpenAIResponsesEncodeOptions
   reasoningEffort?: string
   jsonMode?: boolean
   signal?: AbortSignal
+  degradation?: ResponseDegradationOptions
+  diagnosticWriter?: RequestDiagnosticWriter
 }
 
 export interface OpenAIResponsesRequestBody {
@@ -472,6 +483,7 @@ function numberField(value: unknown, key: string): number {
 export function assembleOpenAIResponsesSse(
   events: readonly OpenAIResponsesSseEvent[],
   providerId: string,
+  degradation: ResponseDegradationOptions = {},
 ): OpenAIResponsesDecodedResponse {
   const textParts = new Map<string, {
     outputIndex: number
@@ -490,6 +502,11 @@ export function assembleOpenAIResponsesSse(
   let inputTokens = 0
   let outputTokens = 0
   let stopReason: string | null = null
+  let thinkingTokens = 0
+  const observed: StreamObservation = {
+    text: false,
+    toolCall: false,
+  }
 
   const appendToolCall = (
     outputIndex: number,
@@ -535,6 +552,7 @@ export function assembleOpenAIResponsesSse(
               : {}),
             argumentsBuffer: '',
           })
+          observed.toolCall = true
         }
         break
       }
@@ -556,6 +574,7 @@ export function assembleOpenAIResponsesSse(
             ? data.text
             : data.delta
         if (typeof text !== 'string') break
+        if (text.length > 0) observed.text = true
         const existing = textParts.get(key)
         if (eventType(event) === 'response.output_text.done' || existing === undefined) {
           textParts.set(key, {
@@ -634,6 +653,12 @@ export function assembleOpenAIResponsesSse(
         if (!isRecord(data.response)) break
         inputTokens = numberField(data.response.usage, 'input_tokens')
         outputTokens = numberField(data.response.usage, 'output_tokens')
+        if (isRecord(data.response.usage)) {
+          thinkingTokens = numberField(
+            data.response.usage.output_tokens_details,
+            'reasoning_tokens',
+          )
+        }
         stopReason = 'completed'
         if (Array.isArray(data.response.output)) {
           for (const [index, item] of data.response.output.entries()) {
@@ -649,6 +674,18 @@ export function assembleOpenAIResponsesSse(
             }
           }
         }
+        break
+      }
+      case 'response.incomplete': {
+        if (!isRecord(data.response)) break
+        inputTokens = numberField(data.response.usage, 'input_tokens')
+        outputTokens = numberField(data.response.usage, 'output_tokens')
+        const reason = isRecord(data.response.incomplete_details)
+          ? data.response.incomplete_details.reason
+          : undefined
+        stopReason = reason === 'max_output_tokens'
+          ? 'incomplete:max_output_tokens'
+          : 'incomplete'
         break
       }
       case 'response.failed':
@@ -729,7 +766,7 @@ export function assembleOpenAIResponsesSse(
     })
   }
 
-  return {
+  const result: OpenAIResponsesDecodedResponse = {
     message: { role: 'assistant', content },
     usage: {
       totalInputTokens: inputTokens,
@@ -738,6 +775,12 @@ export function assembleOpenAIResponsesSse(
     },
     stopReason,
   }
+  assertResponseNotDegraded(result.message, result.usage, stopReason, {
+    ...degradation,
+    ...(thinkingTokens > 0 ? { thinkingTokens } : {}),
+    streamObserved: observed,
+  })
+  return result
 }
 
 export function parseOpenAIResponsesSse(text: string): OpenAIResponsesSseEvent[] {
@@ -800,8 +843,9 @@ export class OpenAIResponsesCodec {
 
   decodeStream(
     events: readonly OpenAIResponsesSseEvent[],
+    degradation: ResponseDegradationOptions = {},
   ): OpenAIResponsesDecodedResponse {
-    return assembleOpenAIResponsesSse(events, this.config.providerId)
+    return assembleOpenAIResponsesSse(events, this.config.providerId, degradation)
   }
 
   async call(
@@ -810,6 +854,12 @@ export class OpenAIResponsesCodec {
     options: OpenAIResponsesEncodeOptions = {},
   ): Promise<OpenAIResponsesDecodedResponse> {
     const request = this.encode(messages, capability, options)
+    await writeRequestDiagnostic(options.diagnosticWriter, {
+      method: 'POST',
+      url: request.url,
+      headers: request.headers,
+      body: request.body,
+    })
     const fetchImpl = this.config.fetch ?? globalThis.fetch
     const response = await fetchImpl(request.url, {
       method: 'POST',
@@ -826,6 +876,9 @@ export class OpenAIResponsesCodec {
         'OpenAI Responses SSE response body 为空',
       )
     }
-    return this.decodeStream(parseOpenAIResponsesSse(await response.text()))
+    return this.decodeStream(
+      parseOpenAIResponsesSse(await response.text()),
+      options.degradation,
+    )
   }
 }

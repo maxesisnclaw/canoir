@@ -2,7 +2,7 @@
   "name": "Responses SSE 组装 reasoning 并保留 encrypted output",
   "category": "stream",
   "operation": "responses-decode-stream",
-  "recorded": false,
+  "recorded": true,
   "input": {
     "config": {
       "providerId": "provider-x",

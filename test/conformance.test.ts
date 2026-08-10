@@ -38,6 +38,36 @@ describe('conformance runner', () => {
     expect(degradationCases.length).toBeGreaterThanOrEqual(4)
   })
 
+  test('M5 五类退化检测与流式录制数量达到发布线', () => {
+    const recordedStreams = cases.filter(
+      (item) => item.category === 'stream' && item.recorded,
+    )
+    expect(recordedStreams.length).toBeGreaterThanOrEqual(10)
+
+    const codes = new Set<string>()
+    for (const item of cases) {
+      const expected = item.expected
+      if (expected === null || typeof expected !== 'object' || Array.isArray(expected)) {
+        continue
+      }
+      const error = expected.error
+      if (error === null || typeof error !== 'object' || Array.isArray(error)) {
+        continue
+      }
+      if (typeof error.code === 'string') codes.add(error.code)
+      if (error.name === 'AnthropicRefusalError') codes.add('refusal')
+    }
+    for (const code of [
+      'max_tokens',
+      'refusal',
+      'runaway_thinking',
+      'empty_response',
+      'stream_assembly_loss',
+    ]) {
+      expect(codes.has(code)).toBe(true)
+    }
+  })
+
   for (const item of cases) {
     test(item.name, async () => {
       const result = await runConformanceCase(item)

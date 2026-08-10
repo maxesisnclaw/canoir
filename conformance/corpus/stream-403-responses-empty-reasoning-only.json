@@ -1,0 +1,39 @@
+{
+  "name": "I10 Responses 真实 reasoning-only 短输出按空响应拒绝",
+  "category": "stream",
+  "operation": "responses-decode-stream",
+  "recorded": true,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "degradation": { "thinkingTokenBudget": 1000 },
+    "events": [
+      {
+        "type": "response.completed",
+        "response": {
+          "usage": {
+            "input_tokens": 21,
+            "output_tokens": 67,
+            "output_tokens_details": { "reasoning_tokens": 61 }
+          },
+          "output": [
+            { "id": "reasoning-a", "type": "reasoning", "summary": [{ "type": "summary_text", "text": "analysis" }], "content": [], "encrypted_content": "encrypted-a" },
+            { "id": "message-a", "type": "message", "role": "assistant", "status": "completed", "content": [{ "type": "output_text", "text": "" }] }
+          ]
+        }
+      }
+    ]
+  },
+  "expected": {
+    "error": {
+      "name": "ResponseDegradationError",
+      "code": "empty_response",
+      "stopReason": "completed",
+      "usage": { "totalInputTokens": 21, "outputTokens": 67, "reliable": true }
+    }
+  }
+}

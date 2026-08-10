@@ -290,8 +290,8 @@ Codec 必须在构造 wire body 时执行 capability 门控，不能依赖 provi
 
 1. `max_tokens` 截断，尤其未闭合 tool arguments。
 2. refusal，包括已有 partial 输出的中途 refusal；partial 全部丢弃。
-3. runaway thinking：没有 text、没有 tool call，且 thinking 消耗超过配置预算。
-4. 空响应：没有可见文本、tool call、完整 thinking 或 refusal 信息。
+3. runaway thinking：没有可见 text、没有 tool call，只有 thinking，且 thinking 消耗超过配置预算。
+4. 空响应：没有可见 text、tool call 或 refusal；未超过预算的 reasoning-only 响应也属于空响应，因为它没有可提交给调用方的结果。
 5. 流式组装丢字段：终止原因与已组装 block 矛盾，或录制事件中存在但最终结果缺失的字段。
 
 - 正例：完整文本响应或完整 tool call 响应进入历史。
@@ -301,7 +301,7 @@ M5 的每类检测必须由至少一条去标识的真实录制 SSE fixture 验�
 
 ### I11 — 400 诊断请求可回放
 
-诊断模式开启时，codec 必须在发送前保存完整出站 request body，保存结果可再次作为同 codec 的编码输出进行比较。默认模式不得落盘。诊断文件不得包含 host 未显式传入的附加状态。
+诊断模式开启时，codec 必须在发送前把完整出站 URL、headers 与 request body 交给调用方注入的 writer，writer 可按 host 指定路径落盘。保存结果可再次作为同 codec 的编码输出进行比较。默认模式不调用 writer。诊断产物不得包含 host 未显式传入的附加状态。
 
 - 正例：诊断文件解析后的 JSON 与实际发送 body 深度相等，可用于离线重放。
 - 反例：只保存日志摘要、截断 tool arguments、遗漏 headers 所需的 beta 决策，或诊断关闭时仍写文件。

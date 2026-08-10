@@ -1,0 +1,40 @@
+{
+  "name": "I10 Responses 真实 reasoning-only 输出超过 thinking 预算",
+  "category": "stream",
+  "operation": "responses-decode-stream",
+  "recorded": true,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "degradation": { "thinkingTokenBudget": 1000 },
+    "events": [
+      {
+        "type": "response.completed",
+        "response": {
+          "usage": {
+            "input_tokens": 28,
+            "output_tokens": 1040,
+            "output_tokens_details": { "reasoning_tokens": 1034 }
+          },
+          "output": [
+            { "id": "reasoning-a", "type": "reasoning", "summary": [{ "type": "summary_text", "text": "analysis" }], "content": [], "encrypted_content": "encrypted-a" },
+            { "id": "reasoning-b", "type": "reasoning", "summary": [{ "type": "summary_text", "text": "more" }], "content": [], "encrypted_content": "encrypted-b" },
+            { "id": "message-a", "type": "message", "role": "assistant", "status": "completed", "content": [] }
+          ]
+        }
+      }
+    ]
+  },
+  "expected": {
+    "error": {
+      "name": "ResponseDegradationError",
+      "code": "runaway_thinking",
+      "stopReason": "completed",
+      "usage": { "totalInputTokens": 28, "outputTokens": 1040, "reliable": true }
+    }
+  }
+}

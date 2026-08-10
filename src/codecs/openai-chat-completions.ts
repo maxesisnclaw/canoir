@@ -1,5 +1,13 @@
 import { cleanWireModelId } from '../model'
 import {
+  assertResponseNotDegraded,
+  type ResponseDegradationOptions,
+} from '../degradation'
+import {
+  writeRequestDiagnostic,
+  type RequestDiagnosticWriter,
+} from '../diagnostic'
+import {
   applyCapability,
   CapabilityError,
   normalizeCapability,
@@ -43,6 +51,8 @@ export interface OpenAIChatEncodeOptions extends CapabilityTransformOptions {
   tools?: OpenAIChatToolDefinition[]
   reasoningEffort?: string
   signal?: AbortSignal
+  degradation?: ResponseDegradationOptions
+  diagnosticWriter?: RequestDiagnosticWriter
 }
 
 export interface OpenAIChatNotice {
@@ -533,6 +543,7 @@ function decodeUsage(value: unknown): Usage {
 export function decodeOpenAIChatResponse(
   response: unknown,
   providerId: string,
+  degradation: ResponseDegradationOptions = {},
 ): OpenAIChatDecodedResponse {
   if (!isRecord(response) || !Array.isArray(response.choices)) {
     throw new OpenAIChatProtocolError(
@@ -612,12 +623,19 @@ export function decodeOpenAIChatResponse(
     }
   }
 
-  return {
+  const decoded: OpenAIChatDecodedResponse = {
     message: { role: 'assistant', content },
     usage: decodeUsage(response.usage),
     stopReason: typeof choice.finish_reason === 'string' ? choice.finish_reason : null,
     notices,
   }
+  assertResponseNotDegraded(
+    decoded.message,
+    decoded.usage,
+    decoded.stopReason,
+    degradation,
+  )
+  return decoded
 }
 
 export function stringifyOpenAIChatRequest(body: OpenAIChatRequestBody): string {
@@ -639,8 +657,11 @@ export class OpenAIChatCompletionsCodec {
     return encodeOpenAIChatRequest(this.config, messages, capability, options)
   }
 
-  decode(response: unknown): OpenAIChatDecodedResponse {
-    return decodeOpenAIChatResponse(response, this.config.providerId)
+  decode(
+    response: unknown,
+    degradation: ResponseDegradationOptions = {},
+  ): OpenAIChatDecodedResponse {
+    return decodeOpenAIChatResponse(response, this.config.providerId, degradation)
   }
 
   async call(
@@ -649,6 +670,12 @@ export class OpenAIChatCompletionsCodec {
     options: OpenAIChatEncodeOptions = {},
   ): Promise<OpenAIChatDecodedResponse> {
     const request = this.encode(messages, capability, options)
+    await writeRequestDiagnostic(options.diagnosticWriter, {
+      method: 'POST',
+      url: request.url,
+      headers: request.headers,
+      body: request.body,
+    })
     const fetchImpl = this.config.fetch ?? globalThis.fetch
     const response = await fetchImpl(request.url, {
       method: 'POST',
@@ -659,7 +686,7 @@ export class OpenAIChatCompletionsCodec {
     if (!response.ok) {
       throw new OpenAIChatHttpError(response.status, await response.text())
     }
-    const decoded = this.decode(await response.json())
+    const decoded = this.decode(await response.json(), options.degradation)
     return {
       ...decoded,
       notices: [...request.notices, ...decoded.notices],

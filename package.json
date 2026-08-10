@@ -1,12 +1,16 @@
 {
   "name": "canoir",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
+  "exports": "./src/index.ts",
+  "types": "./src/index.ts",
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit",
-    "lint": "oxlint src conformance test scripts"
+    "lint": "oxlint src conformance examples test scripts",
+    "example": "bun run examples/minimal.ts",
+    "check": "bun run typecheck && bun run lint && bun test"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",

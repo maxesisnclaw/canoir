@@ -4,7 +4,37 @@
 
 A protocol middle layer for multi-LLM-API agent harnesses: canonical message IR, codecs, capability negotiation, and a conformance corpus.
 
-**Status**: early development（M4 已完成：IR、三家 codec、capability 协商与显式降级可用；退化检测、请求诊断与发布验收尚未完成，不可用于生产）。协议规范见 [SPEC.md](SPEC.md)，实现约束见 [AGENTS.md](AGENTS.md)。
+**Status**: v0.1.0 release candidate。协议规范见 [SPEC.md](SPEC.md)，实现约束见 [AGENTS.md](AGENTS.md)。
+
+## 最小接入
+
+```ts
+import { OpenAIResponsesCodec } from 'canoir'
+
+const codec = new OpenAIResponsesCodec({
+  providerId: 'provider-x',
+  model: 'model-a',
+  endpoint: 'https://endpoint-a.example/v1/responses',
+  apiKey: 'replace-at-runtime',
+})
+
+const request = codec.encode(
+  [{ role: 'user', content: [{ type: 'text', text: 'Hello' }] }],
+  {
+    vision: false,
+    document: 'unsupported',
+    toolCalls: true,
+    thinking: 'native',
+    streaming: true,
+  },
+)
+```
+
+仓库内的可执行版本位于 `examples/minimal.ts`：
+
+```sh
+bun run example
+```
 
 ## License
 

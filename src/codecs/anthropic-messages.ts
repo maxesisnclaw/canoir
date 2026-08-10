@@ -22,6 +22,16 @@ import {
   type ProviderCapability,
 } from '../capability'
 import { cleanWireModelId } from '../model'
+import {
+  assertResponseNotDegraded,
+  ResponseDegradationError,
+  type ResponseDegradationOptions,
+  type StreamObservation,
+} from '../degradation'
+import {
+  writeRequestDiagnostic,
+  type RequestDiagnosticWriter,
+} from '../diagnostic'
 import { validateMessages } from '../validate'
 
 export type AnthropicCompatMode = 'default' | 'minimal'
@@ -53,6 +63,8 @@ export interface AnthropicEncodeOptions extends CapabilityTransformOptions {
   system?: string
   tools?: AnthropicToolDefinition[]
   thinking?: AnthropicThinkingOption
+  degradation?: ResponseDegradationOptions
+  diagnosticWriter?: RequestDiagnosticWriter
 }
 
 export interface AnthropicWireMessage {
@@ -111,12 +123,10 @@ export class AnthropicHttpError extends Error {
   }
 }
 
-export class AnthropicRefusalError extends Error {
+export class AnthropicRefusalError extends ResponseDegradationError {
   readonly category: string | null
   readonly explanation: string | null
   readonly partialChars: number
-  readonly usage: Usage
-
   constructor(
     category: string | null,
     explanation: string | null,
@@ -124,13 +134,15 @@ export class AnthropicRefusalError extends Error {
     usage: Usage,
   ) {
     super(
+      'refusal',
       `Anthropic refusal${category === null ? '' : ` (${category})`}: ${explanation ?? 'no explanation provided'}`,
+      'refusal',
+      usage,
     )
     this.name = 'AnthropicRefusalError'
     this.category = category
     this.explanation = explanation
     this.partialChars = partialChars
-    this.usage = usage
   }
 }
 
@@ -729,6 +741,7 @@ export function decodeAnthropicResponse(
   providerId: string,
   deltaUsage?: unknown,
   streamedStopDetails?: unknown,
+  degradation: ResponseDegradationOptions = {},
 ): AnthropicDecodedResponse {
   if (!isRecord(response)) {
     throw new AnthropicProtocolError(
@@ -763,11 +776,13 @@ export function decodeAnthropicResponse(
     })
   }
 
-  return {
+  const result: AnthropicDecodedResponse = {
     message: { role: 'assistant', content },
     usage,
     stopReason,
   }
+  assertResponseNotDegraded(result.message, usage, stopReason, degradation)
+  return result
 }
 
 function streamBlockFromStart(
@@ -857,6 +872,7 @@ function finishStreamBlock(
 export function assembleAnthropicSse(
   events: readonly AnthropicSseEvent[],
   providerId: string,
+  degradation: ResponseDegradationOptions = {},
 ): AnthropicDecodedResponse {
   const states = new Map<number, StreamBlockState>()
   const completed: Array<{ order: number; block: JsonValue }> = []
@@ -865,6 +881,10 @@ export function assembleAnthropicSse(
   let deltaUsage: unknown
   let stopReason: string | null = null
   let stopDetails: unknown
+  const observed: StreamObservation = {
+    text: false,
+    toolCall: false,
+  }
 
   for (const event of events) {
     const data = event.data
@@ -892,6 +912,12 @@ export function assembleAnthropicSse(
           index,
           streamBlockFromStart(index, startOrder, data.content_block),
         )
+        if (
+          data.content_block.type === 'text' &&
+          typeof data.content_block.text === 'string' &&
+          data.content_block.text.length > 0
+        ) observed.text = true
+        if (data.content_block.type === 'tool_use') observed.toolCall = true
         startOrder += 1
         break
       }
@@ -912,7 +938,10 @@ export function assembleAnthropicSse(
         }
         switch (data.delta.type) {
           case 'text_delta':
-            if (typeof data.delta.text === 'string') state.text += data.delta.text
+            if (typeof data.delta.text === 'string') {
+              state.text += data.delta.text
+              if (data.delta.text.length > 0) observed.text = true
+            }
             break
           case 'thinking_delta':
             if (typeof data.delta.thinking === 'string') {
@@ -977,7 +1006,13 @@ export function assembleAnthropicSse(
     stop_details: stopDetails ?? null,
     usage: initialUsage ?? {},
   }
-  return decodeAnthropicResponse(response, providerId, deltaUsage, stopDetails)
+  return decodeAnthropicResponse(
+    response,
+    providerId,
+    deltaUsage,
+    stopDetails,
+    { ...degradation, streamObserved: observed },
+  )
 }
 
 export function parseAnthropicSse(text: string): AnthropicSseEvent[] {
@@ -1047,12 +1082,18 @@ export class AnthropicMessagesCodec {
     return encodeAnthropicRequest(this.config, messages, capability, options)
   }
 
-  decode(response: unknown): AnthropicDecodedResponse {
-    return decodeAnthropicResponse(response, this.config.providerId)
+  decode(
+    response: unknown,
+    degradation: ResponseDegradationOptions = {},
+  ): AnthropicDecodedResponse {
+    return decodeAnthropicResponse(response, this.config.providerId, undefined, undefined, degradation)
   }
 
-  decodeStream(events: readonly AnthropicSseEvent[]): AnthropicDecodedResponse {
-    return assembleAnthropicSse(events, this.config.providerId)
+  decodeStream(
+    events: readonly AnthropicSseEvent[],
+    degradation: ResponseDegradationOptions = {},
+  ): AnthropicDecodedResponse {
+    return assembleAnthropicSse(events, this.config.providerId, degradation)
   }
 
   async call(
@@ -1061,6 +1102,12 @@ export class AnthropicMessagesCodec {
     options: AnthropicEncodeOptions = {},
   ): Promise<AnthropicDecodedResponse> {
     const request = this.encode(messages, capability, options)
+    await writeRequestDiagnostic(options.diagnosticWriter, {
+      method: 'POST',
+      url: request.url,
+      headers: request.headers,
+      body: request.body,
+    })
     const response = await this.fetchImpl(request.url, {
       method: 'POST',
       headers: request.headers,
@@ -1072,7 +1119,12 @@ export class AnthropicMessagesCodec {
     }
     const contentType = response.headers.get('content-type') ?? ''
     if (contentType.includes('text/event-stream')) {
-      return this.decodeStream(parseAnthropicSse(responseText))
+      return this.decodeStream(parseAnthropicSse(responseText), {
+        ...options.degradation,
+        ...(options.thinking?.type === 'enabled'
+          ? { thinkingTokenBudget: options.thinking.budgetTokens }
+          : {}),
+      })
     }
 
     let parsed: unknown
@@ -1084,6 +1136,11 @@ export class AnthropicMessagesCodec {
         'Anthropic 非流式响应不是合法 JSON',
       )
     }
-    return this.decode(parsed)
+    return this.decode(parsed, {
+      ...options.degradation,
+      ...(options.thinking?.type === 'enabled'
+        ? { thinkingTokenBudget: options.thinking.budgetTokens }
+        : {}),
+    })
   }
 }

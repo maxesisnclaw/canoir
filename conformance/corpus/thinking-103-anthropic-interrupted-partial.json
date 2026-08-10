@@ -29,8 +29,11 @@
     ]
   },
   "expected": {
-    "message": { "role": "assistant", "content": [] },
-    "usage": { "totalInputTokens": 5, "outputTokens": 0, "reliable": true },
-    "stopReason": null
+    "error": {
+      "name": "ResponseDegradationError",
+      "code": "empty_response",
+      "stopReason": null,
+      "usage": { "totalInputTokens": 5, "outputTokens": 0, "reliable": true }
+    }
   }
 }

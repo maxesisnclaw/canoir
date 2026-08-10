@@ -2,7 +2,7 @@
   "name": "Responses SSE 按 output 位置组装正文并读取 usage",
   "category": "stream",
   "operation": "responses-decode-stream",
-  "recorded": false,
+  "recorded": true,
   "input": {
     "config": {
       "providerId": "provider-x",
