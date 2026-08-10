@@ -50,6 +50,7 @@
         "structure-005-i1-missing-result-id.json",
         "structure-006-ir-all-blocks.json",
         "structure-007-ir-role-block-mismatch.json",
+        "structure-008-i1-provider-blocks-pairing.json",
         "thinking-001-i2-complete.json",
         "thinking-002-i2-complete-with-text.json",
         "thinking-003-i2-empty-signature.json",
@@ -81,7 +82,9 @@
       "basis": "canoir",
       "rationale": "Cache hint 不改变消息语义；automatic 或 none 端点可忽略显式锚点，但必须记录降级。",
       "schema": "openai-chat",
-      "cases": ["cache-503-openai-automatic-ignore.json"]
+      "cases": [
+        "cache-503-openai-automatic-ignore.json"
+      ]
     },
     {
       "id": "canoir-prompt-cache-validation",
@@ -96,14 +99,18 @@
       "id": "canoir-capability-fail-loud",
       "basis": "canoir",
       "rationale": "无法满足 capability 时必须在编码前 fail-loud。",
-      "cases": ["degrade-304-document-unsupported.json"]
+      "cases": [
+        "degrade-304-document-unsupported.json"
+      ]
     },
     {
       "id": "canoir-anthropic-provider-filter",
       "basis": "canoir",
       "rationale": "同 provider 原生块才允许回放，过滤后 wire 仍须满足官方请求类型。",
       "schema": "anthropic",
-      "cases": ["compat-102-anthropic-cross-provider-filter.json"]
+      "cases": [
+        "compat-102-anthropic-cross-provider-filter.json"
+      ]
     },
     {
       "id": "canoir-degradation-detection",
@@ -156,24 +163,35 @@
       "source": "anthropic-sdk-0.116.0",
       "anchor": "Messages request body with explicit anthropic-beta header",
       "schema": "anthropic",
-      "cases": ["compat-104-anthropic-context-1m.json"]
+      "cases": [
+        "compat-104-anthropic-context-1m.json"
+      ]
     },
     {
       "id": "anthropic-minimal-proxy-deviation",
       "basis": "deviation",
       "condition": "兼容端点拒绝标准客户端附加字段时启用 minimal mode。",
       "testedAt": "2026-06-29",
-      "evidence": ["f09a87a"],
+      "evidence": [
+        "f09a87a"
+      ],
       "schema": "anthropic",
-      "cases": ["compat-101-anthropic-minimal-mode.json"]
+      "cases": [
+        "compat-101-anthropic-minimal-mode.json"
+      ]
     },
     {
       "id": "anthropic-usage-delta-deviation",
       "basis": "deviation",
       "condition": "message_start usage 为全零占位，message_delta 才提供真实值。",
       "testedAt": "2026-07-30",
-      "evidence": ["b9d2957", "5b6757f"],
-      "cases": ["stream-101-anthropic-usage-delta.json"]
+      "evidence": [
+        "b9d2957",
+        "5b6757f"
+      ],
+      "cases": [
+        "stream-101-anthropic-usage-delta.json"
+      ]
     },
     {
       "id": "anthropic-tool-input-deviation",
@@ -194,7 +212,9 @@
       "basis": "deviation",
       "condition": "兼容端点返回完整但无 provenance token 的 thinking，并可能允许原样回放。",
       "testedAt": "2026-08-10",
-      "evidence": ["https://github.com/maxesisnclaw/canoir/issues/4"],
+      "evidence": [
+        "https://github.com/maxesisnclaw/canoir/issues/4"
+      ],
       "cases": [
         "thinking-104-anthropic-verify-replay-unsigned.json",
         "thinking-105-anthropic-replay-unsigned.json",
@@ -206,7 +226,9 @@
       "basis": "deviation",
       "condition": "兼容端点拒绝包含未安全转义孤代理字符的 JSON 请求。",
       "testedAt": "2026-07-13",
-      "evidence": ["0be5344"],
+      "evidence": [
+        "0be5344"
+      ],
       "cases": [
         "compat-103-anthropic-lone-surrogate.json",
         "compat-203-openai-lone-surrogate.json"
@@ -239,33 +261,55 @@
       "basis": "deviation",
       "condition": "OpenAI-compatible Gemini 端点只接受收窄后的 OpenAPI 3.0 schema 子集。",
       "testedAt": "2026-06-02",
-      "evidence": ["ef35c71", "baa9b9d", "2d41004", "28c08a4"],
-      "cases": ["compat-201-openai-gemini-schema.json"]
+      "evidence": [
+        "ef35c71",
+        "baa9b9d",
+        "2d41004",
+        "28c08a4"
+      ],
+      "cases": [
+        "compat-201-openai-gemini-schema.json"
+      ]
     },
     {
       "id": "gemini-openapi-tool-deviation",
       "basis": "deviation",
       "condition": "OpenAI-compatible Gemini 端点只接受收窄后的 OpenAPI 3.0 schema 子集。",
       "testedAt": "2026-06-02",
-      "evidence": ["ef35c71", "baa9b9d", "2d41004", "28c08a4"],
+      "evidence": [
+        "ef35c71",
+        "baa9b9d",
+        "2d41004",
+        "28c08a4"
+      ],
       "schema": "openai-chat",
-      "cases": ["compat-204-openai-gemini-tools.json"]
+      "cases": [
+        "compat-204-openai-gemini-tools.json"
+      ]
     },
     {
       "id": "openai-chat-reasoning-object-deviation",
       "basis": "deviation",
       "condition": "部分 OpenAI-compatible 端点要求 reasoning object，而非官方 reasoning_effort 字段。",
       "testedAt": "2026-08-10",
-      "evidence": ["conformance/corpus/compat-205-openai-reasoning-object.json"],
-      "cases": ["compat-205-openai-reasoning-object.json"]
+      "evidence": [
+        "conformance/corpus/compat-205-openai-reasoning-object.json"
+      ],
+      "cases": [
+        "compat-205-openai-reasoning-object.json"
+      ]
     },
     {
       "id": "openai-chat-reasoning-content-deviation",
       "basis": "deviation",
       "condition": "部分 OpenAI-compatible 响应返回非标准 reasoning_content 字段。",
       "testedAt": "2026-08-10",
-      "evidence": ["conformance/corpus/thinking-201-openai-discard-reasoning.json"],
-      "cases": ["thinking-201-openai-discard-reasoning.json"]
+      "evidence": [
+        "conformance/corpus/thinking-201-openai-discard-reasoning.json"
+      ],
+      "cases": [
+        "thinking-201-openai-discard-reasoning.json"
+      ]
     },
     {
       "id": "responses-official-request",
@@ -298,8 +342,12 @@
       "basis": "deviation",
       "condition": "兼容端点在 function_call item 上返回并要求回传非标准 thought_signature。",
       "testedAt": "2026-08-10",
-      "evidence": ["conformance/corpus/thinking-301-responses-provider-replay.json"],
-      "cases": ["thinking-301-responses-provider-replay.json"]
+      "evidence": [
+        "conformance/corpus/thinking-301-responses-provider-replay.json"
+      ],
+      "cases": [
+        "thinking-301-responses-provider-replay.json"
+      ]
     }
   ]
 }

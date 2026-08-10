@@ -23,6 +23,9 @@ interface ToolCallState {
   messageIndex: number
   blockIndex: number
   resultCount: number
+  /** 该 id 由 provider_blocks verbatim 回放注册；同 id 的 tool_call block 是
+   *  codec 自带的结构化表达（encode 时去重），不算重复 id。 */
+  fromProviderBlocks?: boolean
 }
 
 const allowedBlocksByRole: Record<Role, ReadonlySet<string>> = {
@@ -464,7 +467,8 @@ export function validateMessages(
       if (role === 'assistant' && block.type === 'tool_call') {
         const id = block.id
         if (isNonEmptyString(id)) {
-          if (calls.has(id)) {
+          const existing = calls.get(id)
+          if (existing !== undefined && !existing.fromProviderBlocks) {
             addIssue(
               issues,
               'I1',
@@ -473,8 +477,36 @@ export function validateMessages(
               blockIndex,
               `tool_call.id ${id} 在序列中重复`,
             )
-          } else {
+          } else if (existing === undefined) {
             calls.set(id, { messageIndex, blockIndex, resultCount: 0 })
+          }
+        }
+      }
+
+      // verbatim 回放块内嵌的 function_call 同样构成 I1 配对来源；两种合法形态：
+      // (a) function_call 在 provider_blocks、配对 function_call_output 以 tool_result 出现
+      //     （回放后模型再次发起 tool loop 的中间态）；
+      // (b) function_call 与 function_call_output 同在 provider_blocks（完整历史回放）。
+      if (role === 'assistant' && block.type === 'provider_blocks') {
+        const rawCalls: string[] = []
+        const rawOutputs: string[] = []
+        for (const raw of block.blocks as unknown[]) {
+          if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) continue
+          const rawType = (raw as { type?: unknown }).type
+          const callId = (raw as { call_id?: unknown }).call_id
+          if (typeof callId !== 'string' || callId.length === 0) continue
+          if (rawType === 'function_call') rawCalls.push(callId)
+          else if (rawType === 'function_call_output') rawOutputs.push(callId)
+        }
+        for (const callId of rawCalls) {
+          if (!calls.has(callId)) {
+            calls.set(callId, { messageIndex, blockIndex, resultCount: 0, fromProviderBlocks: true })
+          }
+        }
+        for (const callId of rawOutputs) {
+          const call = calls.get(callId)
+          if (call !== undefined && call.resultCount === 0) {
+            call.resultCount = 1
           }
         }
       }

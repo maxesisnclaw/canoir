@@ -1,0 +1,33 @@
+{
+  "name": "I1 provider_blocks 内嵌 function_call 构成合法配对",
+  "category": "structure",
+  "operation": "validate",
+  "invariants": ["I1"],
+  "input": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "provider_blocks",
+            "providerId": "provider-x",
+            "blocks": [
+              { "id": "rs_1", "type": "reasoning", "encrypted_content": "enc_1", "summary": [] },
+              { "id": "fc_1", "type": "function_call", "call_id": "call_1", "name": "lookup", "arguments": "{\"q\":\"x\"}" }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          { "type": "tool_result", "toolCallId": "call_1", "content": "{\"ok\":true}" }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "valid": true,
+    "issueCodes": []
+  }
+}
