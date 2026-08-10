@@ -19,9 +19,9 @@ CanoIR 是多 LLM API 的**协议中间层**。任何 agent harness 可以把消
 边界不由"我们不做什么"定义，而由接入面定义：
 
 - 本包**零 host import**。host 的细节（持久化、路由、密钥、重试策略、UI）全部通过接口注入，不出现在本包类型里。
-- 验收测试是真实的：第一个消费者 MaxClaw 接入时不需要任何 shim、全局状态或临时 bridge。接入需要打补丁 = 边界画错了，改边界，不打补丁。
+- 验收测试是真实的：第一个消费者接入时不需要任何 shim、全局状态或临时 bridge。接入需要打补丁 = 边界画错了，改边界，不打补丁。
 
-**当前唯一消费者**：MaxClaw maxclaw-direct runtime（`/Users/maxesisn/maxclaw/`）。第二个预期消费者：将来的 ReAct loop 组件。不为第三个假想消费者设计任何东西（见 R3）。
+**当前唯一消费者**：一个私有 agent harness 的 direct runtime（身份与路径记录于 `AGENTS.local.md`）。第二个预期消费者：将来的 ReAct loop 组件。不为第三个假想消费者设计任何东西（见 R3）。
 
 ## 2. 仓库结构（目标形态，M0 搭建）
 
@@ -85,25 +85,25 @@ canoir/
 
 ## 5. Codec 实现必读（corner case 知识库）
 
-**动手写每个 codec 之前，必读两类材料**（它们是从 MaxClaw 生产事故里挖出来的实证，不是理论）：
+**动手写每个 codec 之前，必读两类材料**（它们是从宿主项目生产事故里挖出来的实证，不是理论）：
 
-1. MaxClaw 协议勘察报告（三家 API 结构面对照 + 历史坑清单）
-2. MaxClaw 现有适配器源码（**参考其行为，不抄其结构**——它们是 host 耦合的，你要写的是 host 无关版）
+1. 宿主项目的协议勘察报告（三家 API 结构面对照 + 历史坑清单）
+2. 宿主项目的现有适配器源码（**参考其行为，不抄其结构**——它们是 host 耦合的，你要写的是 host 无关版）
 
 这些材料位于私有环境，具体路径见 **`AGENTS.local.md`**（本机私有文件，不入库——这是约定：仓库根若存在 `AGENTS.local.md`，实现 agent 必须先读它）。若该文件不存在，停下来向 owner 索取材料，禁止凭记忆臆造 corner case 细节。
 
-以下 corner case 是各 codec 的**最低覆盖线**，每条都必须有 conformance 语料（括号内是 MaxClaw 实证来源，可去读对应 commit/test）：
+以下 corner case 是各 codec 的**最低覆盖线**，每条都必须有 conformance 语料（括号内是宿主项目实证来源，可去读对应 commit/test——位置见 AGENTS.local.md）：
 
 **通用**
-- 流式组装：客户端必须自己从原始 SSE 事件重建缺失字段，不能依赖第三方 SDK 的 accumulate（SDK 不合并 message_delta 的 usage/stop_details 是实证 bug，MaxClaw `b9d2957`/`5b6757f`）
-- lone surrogate 安全：UTF-16 孤代理字符在 JSON.stringify/编码路径不得产生非法字节（MaxClaw `0be5344`，2026-07-13 ellyecode/grok-4.5 线上 500 实证）
-- tool_call 增量组装：`arguments` 空串起点的分片 append（MaxClaw `7d01269`）；JSON 完整即解析，不等多余 delta
+- 流式组装：客户端必须自己从原始 SSE 事件重建缺失字段，不能依赖第三方 SDK 的 accumulate（SDK 不合并 message_delta 的 usage/stop_details 是实证 bug，宿主项目 `b9d2957`/`5b6757f`）
+- lone surrogate 安全：UTF-16 孤代理字符在 JSON.stringify/编码路径不得产生非法字节（宿主项目 `0be5344`，某兼容代理线上 500 实证）
+- tool_call 增量组装：`arguments` 空串起点的分片 append（宿主项目 `7d01269`）；JSON 完整即解析，不等多余 delta
 
 **Anthropic Messages**
 - tool_use input 三种兼容形态解析（A5，`anthropic.ts:1068-1103`）
 - 相邻 user 合并（A3，`anthropic.ts:547-558`）
-- usage 非标准位置回填：message_start 全 0 占位 + message_delta 真值（GLM-5.2/ark 实证，B2）
-- thinking 流式：signature_delta 排序在 thinking_delta 之后的乱序处理（MaxClaw `b21891c`）；thinking 回放的 interleaved 约束（MaxClaw `76da9c6`/`05b3374`）
+- usage 非标准位置回填：message_start 全 0 占位 + message_delta 真值（GLM-5.2 兼容端点实证，B2）
+- thinking 流式：signature_delta 排序在 thinking_delta 之后的乱序处理（宿主项目 `b21891c`）；thinking 回放的 interleaved 约束（宿主项目 `76da9c6`/`05b3374`）
 - 严格 proxy 的 minimal mode（去掉 proxy 不认的字段，`4762ab3`/`3578aa8`）
 - refusal：HTTP 200 ≠ 成功，stop_reason 驱动错误分类，partial 文本丢弃（J1，`ca11797`）
 
@@ -112,7 +112,7 @@ canoir/
 - reasoning_content 字段无标准形态，当前策略：不支持即丢弃并记录，不臆造映射
 
 **OpenAI Responses**
-- 系统提示双模式：`instructions` 顶层字段 vs `input[0]{role:'developer'/'system'}`，代理兼容性优先（A6，`openai-responses.ts:837-857`）
+- 系统提示双模式：`instructions` 顶层字段 vs `input[0]{role:'developer'/'system'}`，代理兼容性优先（A6，`openai-responses.ts:837-857`；实测某些代理会覆盖顶层 `instructions`，`input[role:"system"]` 存活）
 - reasoning item 回放 + encrypted_content（🔬 待实测验证，验证结果写回语料）
 - function_call_output 支持 image block 数组
 - thought_signature 类非标准字段必须回传，不得丢弃（C5）
@@ -147,7 +147,7 @@ interface ProviderCapability {
 
 - **纯数据**：一个 case 一个 JSON 文件，零代码。格式：输入（IR 消息序列或录制的 SSE 事件流）+ capability → 期望输出（编码结果 / 解码结果 / 校验错误 / 降级决策）
 - **命名**：`<类别>-<序号>-<短语>.json`，类别沿用 §5 的分类（structure/stream/toolcall/thinking/usage/compat/refusal/empty/degrade）
-- **种子来源**（M2 起逐类转化）：protocol-survey.md 的 Part B 清单 + MaxClaw `*.test.ts` 里的编码断言 + 生产日志锚点（lone surrogate 500、GLM usage 0/0、max_tokens 截断、refusal 记录——把真实错误响应录制成 fixture）
+- **种子来源**（M2 起逐类转化）：protocol-survey.md 的 Part B 清单 + 宿主项目 `*.test.ts` 里的编码断言 + 生产日志锚点（lone surrogate 500、GLM usage 0/0、max_tokens 截断、refusal 记录——把真实错误响应录制成 fixture）
 - **去标识纪律**：语料中禁止出现内部域名、IP、路径、账号、内部 provider 命名。统一用 `endpoint-a`/`provider-x` 式通用名。这是公开发布的红线（§9 hook 会拦，但第一责任人是写语料的你）
 - 数量预期：M5 完成时 ≥40 条，其中流式录制类 ≥10 条
 
@@ -189,10 +189,10 @@ interface ProviderCapability {
 
 M0 就位，拦截以下模式的任何文件内容：
 
-- 内部域名（`maxng.cc`）、内网 IP 段（`10.x`/`192.168.x` 出现于非示例上下文）
-- 本机绝对路径（`/Users/maxesisn`）
+- 内部域名与内网 IP 段（具体清单见 AGENTS.local.md；`10.x`/`192.168.x` 出现于非示例上下文一律拦）
+- 本机用户目录绝对路径
 - 密钥模式（常见 API key/token 正则）
-- 内部命名：MaxClaw 内部 provider id、channel/session id、telegram id 等
+- 内部命名：宿主项目的内部 provider id、channel/session id、 IM 账号 id 等
 - `keys.env` / `.env` 文件名引用
 
 hook 本身随仓库公开维护。被拦时不允许绕过（`--no-verify` 视为事故）。
