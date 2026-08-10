@@ -43,6 +43,7 @@ import {
 } from '../src/validate'
 
 export interface ConformanceCase {
+  file: string
   name: string
   category: string
   operation: string
@@ -69,7 +70,7 @@ function toJsonValue(value: unknown, field: string): JsonValue {
   return JSON.parse(serialized) as JsonValue
 }
 
-function parseCase(value: unknown, path: string): ConformanceCase {
+function parseCase(value: unknown, path: string, file: string): ConformanceCase {
   if (
     !isRecord(value) ||
     typeof value.name !== 'string' ||
@@ -82,6 +83,7 @@ function parseCase(value: unknown, path: string): ConformanceCase {
   }
 
   return {
+    file,
     name: value.name,
     category: value.category,
     operation: value.operation,
@@ -97,7 +99,7 @@ export function loadConformanceCases(directory: string): ConformanceCase[] {
     .sort()
     .map((file) => {
       const path = join(directory, file)
-      return parseCase(JSON.parse(readFileSync(path, 'utf8')), path)
+      return parseCase(JSON.parse(readFileSync(path, 'utf8')), path, file)
     })
 }
 

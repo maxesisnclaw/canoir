@@ -6,6 +6,8 @@ CanoIR 定义一套与 provider 无关的消息中间表示（IR）、消息序�
 
 本文中的“必须”“不得”是规范性要求。“请求历史”指即将发送给模型的完整、可回放消息序列；尚未完成工具执行的临时状态不属于请求历史。
 
+官方协议规范是 vendor wire 行为的先验事实源；实测行为只有在 `normative/registry.json` 中登记为偏差后，才能覆盖对应条件下的官方规则。代码行为与官方规范矛盾且没有对应偏差登记时，视为 bug，不得解释为兼容特性。官方文档更新或端点复测后，相关偏差必须重新评估。
+
 ## 1. 数据约定
 
 ### 1.1 JSON 值
@@ -226,7 +228,47 @@ interface DegradationRecord {
 
 转换器必须由真实调用方提供；codec 不伪造图片或文档文本。
 
-## 4. 消息序列不变量
+## 4. Vendor 协议规范与实测偏差
+
+固定来源、不可变版本、规则依据和对应语料统一登记在 `normative/registry.json`。本节只定义来源层级与已确认边界，不复制 registry 中可机械审计的逐 case 映射。
+
+### 4.1 Anthropic Messages
+
+#### 官方规范
+
+- 请求结构以 `@anthropic-ai/sdk@0.116.0` 的 `MessageCreateParams` 为机械校验类型，固定到 registry 记录的 tag commit；API version 固定为 `2023-06-01`。
+- 标准请求字段、content block、thinking 配置、tool use、usage、refusal 和流式事件以该版本公开类型为依据。
+
+#### 实测偏差
+
+- 兼容端点的 minimal proxy 模式、`message_start` 全零 usage 后由 `message_delta` 回填、tool input 的 JSON 字符串或 `arguments` 形态，均是条件化偏差。
+- 完整但没有 provenance token 的 thinking 可以合法进入 IR；能否回放由 `thinkingReplay` 三档 capability 决定，而不是假定所有端点都执行签名校验。
+
+### 4.2 OpenAI Chat Completions
+
+#### 官方规范
+
+- 请求结构以 `openai@7.4.0` 的 `ChatCompletionCreateParams` 做机械校验，其上游规范锚定 registry 中固定 commit 的 OpenAI OpenAPI `CreateChatCompletionRequest`。
+- 官方字段与响应结构不因兼容端点的方言而扩张；`reasoning_effort` 等字段按固定版本类型解释。
+
+#### 实测偏差
+
+- Gemini 兼容层只接受收窄后的 OpenAPI 3.0 schema 子集，属于端点方言，不改写官方基线。
+- `reasoning` object 与响应中的 `reasoning_content` 是兼容端点扩展，必须按登记条件处理；未登记的相似字段不得凭名称臆造映射。
+
+### 4.3 OpenAI Responses
+
+#### 官方规范
+
+- 请求结构以 `openai@7.4.0` 的 `ResponseCreateParams` 做机械校验，其上游规范锚定 registry 中固定 commit 的 OpenAI OpenAPI `CreateResponse`。
+- reasoning item 的 `encrypted_content` 属于官方结构；需要延续推理时应请求并原样回放同 provider 返回的完整 item。
+- function tool 的 `strict` 是该固定版本 request 类型的必填字段。CanoIR 默认发送 `strict: false`，保持现有宽松 JSON Schema 语义。
+
+#### 实测偏差
+
+- function call item 上的 `thought_signature` 是兼容端点扩展；仅在同 provider verbatim 回放中保留，不把它提升为 OpenAI 官方字段。
+
+## 5. 消息序列不变量
 
 校验错误至少包含不变量编号、消息索引、可选 block 索引和稳定错误码。Codec 正规化、编码与流式组装不得绕过这些规则。
 
@@ -317,7 +359,7 @@ M5 的每类检测必须由至少一条去标识的真实录制 SSE fixture 验�
 
 诊断产物可能含用户内容和凭据相关 header；是否保存、保存路径与清理由调用方明确决定。
 
-## 5. Codec 边界
+## 6. Codec 边界
 
 - Codec 自己使用 `fetch` 发送请求并解析 SSE，不依赖 provider SDK。
 - Codec constructor 接收原始 model ID、providerId、capability 和 provider 所需连接参数；host 的持久化、路由、密钥发现、重试和 UI 类型不得进入 CanoIR。
@@ -326,7 +368,7 @@ M5 的每类检测必须由至少一条去标识的真实录制 SSE fixture 验�
 - 响应解码顺序为：解析事件 → 完整组装 block → 归一化 usage/stop reason → 退化检测 → 校验可回放 IR。
 - 失败必须带稳定分类，禁止用空响应、空 object 或伪造 tool result 掩盖协议错误。
 
-## 6. Conformance 数据契约
+## 7. Conformance 数据契约
 
 Conformance case 是纯 JSON 数据，一个文件一个 case。每个 case 至少包含：
 
@@ -337,3 +379,11 @@ Conformance case 是纯 JSON 数据，一个文件一个 case。每个 case 至�
 - 期望输出、错误码或降级记录。
 
 Fixture 禁止包含内部域名、IP、账号、路径、provider 路由名和 session/channel 标识。所有真实录制数据在入库前去标识，但不得改变与协议行为相关的字段顺序、空值、delta 边界或 token 数。
+
+每个 corpus 文件必须且只能被 `normative/registry.json` 中一条规则精确登记，禁止按目录、文件名前缀或默认值隐式继承依据。规则分为三类：
+
+- `official`：引用固定官方 source 与具体类型或 schema anchor；成功的 encode case 必须通过对应官方 request 类型的机械校验。
+- `deviation`：记录适用条件、实测日期与可复核 evidence；偏差只在所登记条件下覆盖官方规则。
+- `canoir`：记录 CanoIR 自身 IR、不变量、门控或退化检测规则及其设计理由。
+
+新增语料未登记、重复登记、官方来源未固定到不可变 commit，或成功 encode case 既没有 schema 校验也没有显式偏差登记时，conformance 检查必须失败。

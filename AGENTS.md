@@ -6,7 +6,7 @@
 
 实现本项目的 agent 有三种已被预判的失败模式，对应三条硬规则：
 
-**R1 禁止子步骤蔓延。** §8 的 M0–M5 是唯一合法计划，顺序即依赖序。如果你在 M3 发现地基没打牢，**停下来修地基**——回改 M0–M2 的产物（通常是 SPEC.md 或类型定义），然后继续 M3。禁止创建 3.1/3.2 式子任务来绕过地基问题。发现 spec 缺陷的正确动作是改 spec，不是在代码里加变通层。
+**R1 禁止子步骤蔓延。** §8 的 M0–M6 是唯一合法计划，顺序即依赖序。如果你在 M3 发现地基没打牢，**停下来修地基**——回改 M0–M2 的产物（通常是 SPEC.md 或类型定义），然后继续 M3。禁止创建 3.1/3.2 式子任务来绕过地基问题。发现 spec 缺陷的正确动作是改 spec，不是在代码里加变通层。
 
 **R2 关键承载点不可偷工。** §4 每条不变量附有验收标准（具体测试形态）。里程碑完成判定的第一项就是逐条核对承载点验收——缺一项，该里程碑不算完成，无论代码看起来多完整。
 
@@ -41,6 +41,12 @@ canoir/
 ├── conformance/
 │   ├── runner.ts        # 语料 runner
 │   └── corpus/          # 语料 case，纯 JSON 数据，一个 case 一个文件
+├── normative/
+│   └── registry.json    # 固定官方来源 + 每条语料的官方/偏差/CanoIR 依据
+├── scripts/
+│   └── check-official-schema.ts # 用固定官方类型机械校验 encode body
+├── .github/workflows/
+│   └── ci.yml           # 安装锁定依赖并运行完整检查
 └── test/
 ```
 
@@ -85,12 +91,12 @@ canoir/
 
 ## 5. Codec 实现必读（corner case 知识库）
 
-**动手写每个 codec 之前，必读两类材料**（它们是从宿主项目生产事故里挖出来的实证，不是理论）：
+**官方协议规范是 wire 行为的先验事实源。** 动手写每个 codec 之前，先核对 `normative/registry.json` 固定的官方版本，再读以下两类实践材料：
 
 1. 宿主项目的协议勘察报告（三家 API 结构面对照 + 历史坑清单）
 2. 宿主项目的现有适配器源码（**参考其行为，不抄其结构**——它们是 host 耦合的，你要写的是 host 无关版）
 
-这些材料位于私有环境，具体路径见 **`AGENTS.local.md`**（本机私有文件，不入库——这是约定：仓库根若存在 `AGENTS.local.md`，实现 agent 必须先读它）。若该文件不存在，停下来向 owner 索取材料，禁止凭记忆臆造 corner case 细节。
+这些材料用于发现官方规范没有覆盖或兼容端点偏离官方规范的行为，不得无登记地覆盖官方基线。材料位于私有环境，具体路径见 **`AGENTS.local.md`**（本机私有文件，不入库——这是约定：仓库根若存在 `AGENTS.local.md`，实现 agent 必须先读它）。若该文件不存在，停下来向 owner 索取材料，禁止凭记忆臆造 corner case 细节。
 
 以下 corner case 是各 codec 的**最低覆盖线**，每条都必须有 conformance 语料（括号内是宿主项目实证来源，可去读对应 commit/test——位置见 AGENTS.local.md）：
 
@@ -154,6 +160,8 @@ interface ProviderCapability {
 - **命名**：`<类别>-<序号>-<短语>.json`，类别沿用 §5 的分类（structure/stream/toolcall/thinking/usage/compat/refusal/empty/degrade）
 - **种子来源**（M2 起逐类转化）：protocol-survey.md 的 Part B 清单 + 宿主项目 `*.test.ts` 里的编码断言 + 生产日志锚点（lone surrogate 500、GLM usage 0/0、max_tokens 截断、refusal 记录——把真实错误响应录制成 fixture）
 - **去标识纪律**：语料中禁止出现内部域名、IP、路径、账号、内部 provider 命名。统一用 `endpoint-a`/`provider-x` 式通用名。这是公开发布的红线（§9 hook 会拦，但第一责任人是写语料的你）
+- **依据登记**：每个 corpus 文件必须且只能在 `normative/registry.json` 中登记一次。`official` 规则引用固定 source 与 anchor；`deviation` 规则必须写明 condition、testedAt 与 evidence；`canoir` 规则必须写明 rationale。禁止新增未登记语料或用默认规则隐式继承依据
+- **机械校验**：成功 encode case 必须通过固定官方 request type，或显式登记为实测偏差。官方 SDK 只作为 devDependency，不得进入运行时依赖
 - 数量预期：M5 完成时 ≥40 条，其中流式录制类 ≥10 条
 
 ## 8. 里程碑与完成判定（DoD）
@@ -189,6 +197,14 @@ interface ProviderCapability {
 - README（一句话宣称 + 最小接入示例，示例代码必须真的能跑）
 - 语料总数 ≥40
 - DoD：§4 全部 11 条验收逐项核对通过；tag v0.1.0（tag 动作前需项目 owner 确认）
+
+**M6 — 官方规范与实测偏差层**
+- 固定 Anthropic SDK、OpenAI OpenAPI 与 OpenAI SDK 的不可变版本、commit、日期和 schema/type anchor
+- `normative/registry.json` 精确覆盖全部 corpus case，逐条区分 `official`、`deviation` 与 `canoir`
+- 成功 encode case 用固定官方 request type 做机械校验；官方 SDK 仅作开发期校验，运行时继续零依赖
+- CI 使用 lockfile 安装依赖并运行完整 `bun run check`
+- SPEC 按 vendor 分开写官方规范与实测偏差，明确未登记的规范冲突一律视为 bug
+- DoD：registry 全覆盖且无重复；全部适用 encode body 通过官方类型校验；每条偏差具备 condition、testedAt、evidence；完整检查与公开扫描通过
 
 ## 9. Pre-push hook（公开发布防线）
 

@@ -45,7 +45,8 @@
         "type": "function",
         "name": "lookup",
         "description": "lookup locally",
-        "parameters": { "type": "object", "properties": {} }
+        "parameters": { "type": "object", "properties": {} },
+        "strict": false
       }
     ],
     "tool_choice": "auto"

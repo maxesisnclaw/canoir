@@ -413,6 +413,7 @@ function encodeTools(
       name: tool.name,
       description: tool.description,
       parameters: tool.parameters,
+      strict: false,
     })
   }
   return tools
