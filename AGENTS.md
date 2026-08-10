@@ -85,14 +85,12 @@ canoir/
 
 ## 5. Codec 实现必读（corner case 知识库）
 
-**动手写每个 codec 之前，必读这两份材料**（它们是从 MaxClaw 生产事故里挖出来的实证，不是理论）：
+**动手写每个 codec 之前，必读两类材料**（它们是从 MaxClaw 生产事故里挖出来的实证，不是理论）：
 
-1. `/Users/maxesisn/maxclaw/tmp/protocol-survey.md` — 三家 API 结构面对照表（Part A）+ 历史坑（Part B）
-2. MaxClaw 现有适配器源码（**参考其行为，不抄其结构**——它们是 host 耦合的，你要写的是 host 无关版）：
-   - `/Users/maxesisn/maxclaw/src/llm/providers/anthropic.ts`
-   - `/Users/maxesisn/maxclaw/src/llm/providers/openai-completions.ts`
-   - `/Users/maxesisn/maxclaw/src/llm/providers/openai-responses.ts`
-   - `/Users/maxesisn/maxclaw/src/llm/types.ts`（IR 雏形）
+1. MaxClaw 协议勘察报告（三家 API 结构面对照 + 历史坑清单）
+2. MaxClaw 现有适配器源码（**参考其行为，不抄其结构**——它们是 host 耦合的，你要写的是 host 无关版）
+
+这些材料位于私有环境，具体路径见 **`AGENTS.local.md`**（本机私有文件，不入库——这是约定：仓库根若存在 `AGENTS.local.md`，实现 agent 必须先读它）。若该文件不存在，停下来向 owner 索取材料，禁止凭记忆臆造 corner case 细节。
 
 以下 corner case 是各 codec 的**最低覆盖线**，每条都必须有 conformance 语料（括号内是 MaxClaw 实证来源，可去读对应 commit/test）：
 
@@ -199,7 +197,7 @@ M0 就位，拦截以下模式的任何文件内容：
 
 hook 本身随仓库公开维护。被拦时不允许绕过（`--no-verify` 视为事故）。
 
-**已知例外与处理**：§5 引用的 MaxClaw 本机路径（`/Users/maxesisn/maxclaw/...`）是 bootstrap 脚手架——初版实现期需要它们去读实证材料，但它们不可能通过本 hook。处理规则：这些引用只允许存在于 AGENTS.md；**首次公开 push 前**，要么语料已转化完成、§5 改写为指向仓库内语料的通用描述，要么把实证材料去标识后 vendor 进仓库。M5 的 DoD 隐含包含此项：v0.1.0 tag 前仓库必须能整体通过 §9 检查。
+**私有指引的存放约定**：本机路径、内部材料位置等私有信息一律放 `AGENTS.local.md`（已在 .gitignore，永不入库），AGENTS.md 只保留通用描述 + 读取约定。入库文件从第一个 commit 起就必须能整体通过 §9 检查，不允许"先污染后清理"。
 
 ## 10. 工作方式
 
