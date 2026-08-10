@@ -1,0 +1,57 @@
+{
+  "name": "Gemini schema sanitizer 接入 Chat Completions 工具编码",
+  "category": "compat",
+  "operation": "openai-chat-encode",
+  "recorded": true,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key",
+      "toolSchemaDialect": "gemini-openapi"
+    },
+    "options": {
+      "tools": [
+        {
+          "name": "lookup",
+          "description": "look up a value",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "kind": { "type": "string", "const": "brief" },
+              "payload": { "type": "object", "properties": {} }
+            },
+            "required": ["kind"],
+            "additionalProperties": false
+          }
+        }
+      ]
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "lookup" }] }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "messages": [{ "role": "user", "content": "lookup" }],
+    "stream": false,
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "lookup",
+          "description": "look up a value",
+          "parameters": {
+            "type": "OBJECT",
+            "properties": {
+              "kind": { "type": "STRING", "enum": ["brief"] },
+              "payload": {}
+            },
+            "required": ["kind"]
+          }
+        }
+      }
+    ]
+  }
+}

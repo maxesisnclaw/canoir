@@ -1,0 +1,29 @@
+{
+  "name": "Chat Completions 缺失工具 ID 时稳定合成",
+  "category": "toolcall",
+  "operation": "openai-chat-decode-stability",
+  "recorded": true,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "response": {
+      "choices": [
+        {
+          "message": {
+            "content": null,
+            "tool_calls": [
+              { "type": "function", "function": { "name": "lookup", "arguments": "{}" } }
+            ]
+          },
+          "finish_reason": "tool_calls"
+        }
+      ],
+      "usage": { "prompt_tokens": 8, "completion_tokens": 2 }
+    }
+  },
+  "expected": { "nonEmpty": true, "stable": true }
+}

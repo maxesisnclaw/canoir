@@ -1,0 +1,31 @@
+{
+  "name": "Chat Completions 丢弃并记录非标准 reasoning content",
+  "category": "thinking",
+  "operation": "openai-chat-decode",
+  "recorded": true,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "response": {
+      "choices": [
+        {
+          "message": { "content": "answer", "reasoning_content": "hidden" },
+          "finish_reason": "stop"
+        }
+      ],
+      "usage": { "prompt_tokens": 9, "completion_tokens": 3 }
+    }
+  },
+  "expected": {
+    "message": { "role": "assistant", "content": [{ "type": "text", "text": "answer" }] },
+    "usage": { "totalInputTokens": 9, "outputTokens": 3, "reliable": true },
+    "stopReason": "stop",
+    "notices": [
+      { "code": "discarded_reasoning_content", "detail": "丢弃非标准 reasoning_content (6 chars)" }
+    ]
+  }
+}

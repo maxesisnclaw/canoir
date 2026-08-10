@@ -1,0 +1,43 @@
+{
+  "name": "Chat Completions 解码标准工具调用",
+  "category": "toolcall",
+  "operation": "openai-chat-decode",
+  "recorded": true,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "response": {
+      "choices": [
+        {
+          "message": {
+            "content": null,
+            "tool_calls": [
+              {
+                "id": "call-a",
+                "type": "function",
+                "function": { "name": "lookup", "arguments": "{\"q\":\"canoe\"}" }
+              }
+            ]
+          },
+          "finish_reason": "tool_calls"
+        }
+      ],
+      "usage": { "prompt_tokens": 12, "completion_tokens": 4 }
+    }
+  },
+  "expected": {
+    "message": {
+      "role": "assistant",
+      "content": [
+        { "type": "tool_call", "id": "call-a", "name": "lookup", "arguments": { "q": "canoe" } }
+      ]
+    },
+    "usage": { "totalInputTokens": 12, "outputTokens": 4, "reliable": true },
+    "stopReason": "tool_calls",
+    "notices": []
+  }
+}

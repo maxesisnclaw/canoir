@@ -13,6 +13,7 @@ import type {
   ToolResultBlock,
   Usage,
 } from '../types'
+import { cleanWireModelId } from '../model'
 import { validateMessages } from '../validate'
 
 export type AnthropicCompatMode = 'default' | 'minimal'
@@ -24,6 +25,7 @@ export interface AnthropicCodecConfig {
   apiKey: string
   headers?: Record<string, string>
   compatMode?: AnthropicCompatMode
+  contextWindowTokens?: number
   fetch?: typeof globalThis.fetch
 }
 
@@ -474,6 +476,19 @@ function buildHeaders(config: AnthropicCodecConfig): Record<string, string> {
     }
   }
 
+  if ((config.contextWindowTokens ?? 0) >= 1_000_000) {
+    const beta = 'context-1m-2025-08-07'
+    const existing = headers.get('anthropic-beta')
+    const values = new Set(
+      existing
+        ?.split(',')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0) ?? [],
+    )
+    values.add(beta)
+    headers.set('anthropic-beta', [...values].join(','))
+  }
+
   return Object.fromEntries(
     [...headers.entries()].sort(([left], [right]) => left.localeCompare(right)),
   )
@@ -520,7 +535,7 @@ export function encodeAnthropicRequest(
   }
 
   const body: AnthropicRequestBody = {
-    model: config.model,
+    model: cleanWireModelId(config.model),
     max_tokens: options.maxOutputTokens ?? 32_000,
     messages: requestMessages,
     stream: options.stream ?? true,

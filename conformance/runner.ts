@@ -11,6 +11,15 @@ import {
   type AnthropicSseEvent,
   stringifyAnthropicRequest,
 } from '../src/codecs/anthropic-messages'
+import {
+  OpenAIChatCompletionsCodec,
+  OpenAIChatProtocolError,
+  sanitizeSchemaForGemini,
+  stringifyOpenAIChatRequest,
+  type OpenAIChatCodecConfig,
+  type OpenAIChatEncodeOptions,
+  type OpenAIChatRequestBody,
+} from '../src/codecs/openai-chat-completions'
 import type { JsonObject, JsonValue, Message } from '../src/types'
 import {
   validateMessages,
@@ -76,7 +85,7 @@ export function loadConformanceCases(directory: string): ConformanceCase[] {
     })
 }
 
-function codecConfig(input: JsonObject): AnthropicCodecConfig {
+function anthropicCodecConfig(input: JsonObject): AnthropicCodecConfig {
   const value = input.config
   if (!isRecord(value)) throw new Error('anthropic case 缺少 input.config')
   if (
@@ -108,6 +117,44 @@ function codecConfig(input: JsonObject): AnthropicCodecConfig {
       ? { compatMode: value.compatMode }
       : {}),
     ...(headers === undefined ? {} : { headers }),
+    ...(typeof value.contextWindowTokens === 'number'
+      ? { contextWindowTokens: value.contextWindowTokens }
+      : {}),
+  }
+}
+
+function openAIChatCodecConfig(input: JsonObject): OpenAIChatCodecConfig {
+  const value = input.config
+  if (!isRecord(value)) throw new Error('openai chat case 缺少 input.config')
+  if (
+    typeof value.providerId !== 'string' ||
+    typeof value.model !== 'string' ||
+    typeof value.endpoint !== 'string' ||
+    typeof value.apiKey !== 'string'
+  ) {
+    throw new Error('openai chat config 缺少 providerId/model/endpoint/apiKey')
+  }
+
+  const headers = isRecord(value.headers)
+    ? Object.fromEntries(
+        Object.entries(value.headers).map(([key, headerValue]) => {
+          if (typeof headerValue !== 'string') {
+            throw new Error(`header ${key} 必须是字符串`)
+          }
+          return [key, headerValue]
+        }),
+      )
+    : undefined
+
+  return {
+    providerId: value.providerId,
+    model: value.model,
+    endpoint: value.endpoint,
+    apiKey: value.apiKey,
+    ...(headers === undefined ? {} : { headers }),
+    ...(value.toolSchemaDialect === 'gemini-openapi'
+      ? { toolSchemaDialect: value.toolSchemaDialect }
+      : {}),
   }
 }
 
@@ -121,6 +168,12 @@ function messages(input: JsonObject): Message[] {
 function encodeOptions(input: JsonObject): AnthropicEncodeOptions {
   return isRecord(input.options)
     ? (input.options as AnthropicEncodeOptions)
+    : {}
+}
+
+function openAIChatEncodeOptions(input: JsonObject): OpenAIChatEncodeOptions {
+  return isRecord(input.options)
+    ? (input.options as OpenAIChatEncodeOptions)
     : {}
 }
 
@@ -147,6 +200,9 @@ function normalizeError(error: unknown): JsonValue {
     )
   }
   if (error instanceof AnthropicProtocolError) {
+    return { error: { name: error.name, code: error.code } }
+  }
+  if (error instanceof OpenAIChatProtocolError) {
     return { error: { name: error.name, code: error.code } }
   }
   if (error instanceof Error) {
@@ -198,7 +254,7 @@ export async function runConformanceCase(
         actual = validationActual(item.input)
         break
       case 'anthropic-encode': {
-        const codec = new AnthropicMessagesCodec(codecConfig(item.input))
+        const codec = new AnthropicMessagesCodec(anthropicCodecConfig(item.input))
         const request = codec.encode(messages(item.input), encodeOptions(item.input))
         actual = item.input.includeHeaders === true
           ? toJsonValue(
@@ -209,12 +265,12 @@ export async function runConformanceCase(
         break
       }
       case 'anthropic-decode': {
-        const codec = new AnthropicMessagesCodec(codecConfig(item.input))
+        const codec = new AnthropicMessagesCodec(anthropicCodecConfig(item.input))
         actual = toJsonValue(codec.decode(item.input.response), `${item.name}.actual`)
         break
       }
       case 'anthropic-decode-stability': {
-        const codec = new AnthropicMessagesCodec(codecConfig(item.input))
+        const codec = new AnthropicMessagesCodec(anthropicCodecConfig(item.input))
         const first = codec.decode(item.input.response)
         const second = codec.decode(item.input.response)
         const firstTool = first.message.content.find(
@@ -234,7 +290,7 @@ export async function runConformanceCase(
         break
       }
       case 'anthropic-decode-stream': {
-        const codec = new AnthropicMessagesCodec(codecConfig(item.input))
+        const codec = new AnthropicMessagesCodec(anthropicCodecConfig(item.input))
         actual = toJsonValue(
           codec.decodeStream(sseEvents(item.input)),
           `${item.name}.actual`,
@@ -244,6 +300,66 @@ export async function runConformanceCase(
       case 'anthropic-stringify':
         actual = stringifyActual(item.input)
         break
+      case 'openai-chat-encode': {
+        const codec = new OpenAIChatCompletionsCodec(
+          openAIChatCodecConfig(item.input),
+        )
+        const request = codec.encode(
+          messages(item.input),
+          openAIChatEncodeOptions(item.input),
+        )
+        actual = item.input.includeEnvelope === true
+          ? toJsonValue(request, `${item.name}.actual`)
+          : toJsonValue(request.body, `${item.name}.actual`)
+        break
+      }
+      case 'openai-chat-decode': {
+        const codec = new OpenAIChatCompletionsCodec(
+          openAIChatCodecConfig(item.input),
+        )
+        actual = toJsonValue(codec.decode(item.input.response), `${item.name}.actual`)
+        break
+      }
+      case 'openai-chat-decode-stability': {
+        const codec = new OpenAIChatCompletionsCodec(
+          openAIChatCodecConfig(item.input),
+        )
+        const first = codec.decode(item.input.response)
+        const second = codec.decode(item.input.response)
+        const firstTool = first.message.content.find(
+          (block) => block.type === 'tool_call',
+        )
+        const secondTool = second.message.content.find(
+          (block) => block.type === 'tool_call',
+        )
+        actual = {
+          nonEmpty:
+            firstTool?.type === 'tool_call' && firstTool.id.length > 0,
+          stable:
+            firstTool?.type === 'tool_call' &&
+            secondTool?.type === 'tool_call' &&
+            firstTool.id === secondTool.id,
+        }
+        break
+      }
+      case 'openai-chat-sanitize-schema':
+        actual = toJsonValue(
+          sanitizeSchemaForGemini(item.input.schema),
+          `${item.name}.actual`,
+        )
+        break
+      case 'openai-chat-stringify': {
+        if (!isRecord(item.input.body)) {
+          throw new Error('openai stringify case 缺少 input.body')
+        }
+        const json = stringifyOpenAIChatRequest(
+          item.input.body as unknown as OpenAIChatRequestBody,
+        )
+        actual = {
+          containsEscapedLoneSurrogate: json.includes('\\ud800'),
+        }
+        break
+      }
       default:
         throw new Error(`不支持的 conformance operation: ${item.operation}`)
     }

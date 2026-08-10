@@ -1,0 +1,46 @@
+{
+  "name": "I3 Chat Completions 工具调用 assistant 使用 null content",
+  "category": "structure",
+  "operation": "openai-chat-encode",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/chat/completions",
+      "apiKey": "test-key"
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "look up" }] },
+      {
+        "role": "assistant",
+        "content": [
+          { "type": "tool_call", "id": "call-a", "name": "lookup", "arguments": { "q": "canoe" } }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [{ "type": "tool_result", "toolCallId": "call-a", "content": "done" }]
+      }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "messages": [
+      { "role": "user", "content": "look up" },
+      {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call-a",
+            "type": "function",
+            "function": { "name": "lookup", "arguments": "{\"q\":\"canoe\"}" }
+          }
+        ]
+      },
+      { "role": "tool", "content": "done", "tool_call_id": "call-a" }
+    ],
+    "stream": false
+  }
+}

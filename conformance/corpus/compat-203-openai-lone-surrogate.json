@@ -1,0 +1,14 @@
+{
+  "name": "Chat Completions JSON 编码安全转义 lone surrogate",
+  "category": "compat",
+  "operation": "openai-chat-stringify",
+  "recorded": false,
+  "input": {
+    "body": {
+      "model": "model-a",
+      "messages": [{ "role": "user", "content": "\ud800" }],
+      "stream": false
+    }
+  },
+  "expected": { "containsEscapedLoneSurrogate": true }
+}

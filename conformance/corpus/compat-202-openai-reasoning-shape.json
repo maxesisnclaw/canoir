@@ -1,0 +1,24 @@
+{
+  "name": "Chat Completions o 系模型使用字符串 reasoning effort",
+  "category": "compat",
+  "operation": "openai-chat-encode",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "o3-mini",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "options": { "reasoningEffort": "high" },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "solve" }] }
+    ]
+  },
+  "expected": {
+    "model": "o3-mini",
+    "messages": [{ "role": "user", "content": "solve" }],
+    "stream": false,
+    "reasoning_effort": "high"
+  }
+}

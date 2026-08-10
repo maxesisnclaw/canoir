@@ -1,0 +1,48 @@
+{
+  "name": "Chat Completions 拆分并关联并行工具结果",
+  "category": "structure",
+  "operation": "openai-chat-encode",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "run" }] },
+      {
+        "role": "assistant",
+        "content": [
+          { "type": "tool_call", "id": "call-a", "name": "first", "arguments": {} },
+          { "type": "tool_call", "id": "call-b", "name": "second", "arguments": {} }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          { "type": "tool_result", "toolCallId": "call-a", "content": "a" },
+          { "type": "tool_result", "toolCallId": "call-b", "content": "b" }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "messages": [
+      { "role": "user", "content": "run" },
+      {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          { "id": "call-a", "type": "function", "function": { "name": "first", "arguments": "{}" } },
+          { "id": "call-b", "type": "function", "function": { "name": "second", "arguments": "{}" } }
+        ]
+      },
+      { "role": "tool", "content": "a", "tool_call_id": "call-a" },
+      { "role": "tool", "content": "b", "tool_call_id": "call-b" }
+    ],
+    "stream": false
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "name": "Chat Completions 不把非法工具参数静默降级为空 object",
+  "category": "toolcall",
+  "operation": "openai-chat-decode",
+  "recorded": true,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "response": {
+      "choices": [
+        {
+          "message": {
+            "content": null,
+            "tool_calls": [
+              { "id": "call-a", "type": "function", "function": { "name": "lookup", "arguments": "{" } }
+            ]
+          },
+          "finish_reason": "tool_calls"
+        }
+      ],
+      "usage": { "prompt_tokens": 8, "completion_tokens": 2 }
+    }
+  },
+  "expected": { "error": { "name": "OpenAIChatProtocolError", "code": "invalid_tool_arguments_json" } }
+}

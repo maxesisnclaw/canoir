@@ -20,6 +20,13 @@ describe('conformance runner', () => {
     ).toBeGreaterThanOrEqual(3)
   })
 
+  test('M3 Chat Completions 新增语料不少于 8 条', () => {
+    const openAIChatCases = cases.filter((item) =>
+      item.operation.startsWith('openai-chat-'),
+    )
+    expect(openAIChatCases.length).toBeGreaterThanOrEqual(8)
+  })
+
   for (const item of cases) {
     test(item.name, async () => {
       const result = await runConformanceCase(item)

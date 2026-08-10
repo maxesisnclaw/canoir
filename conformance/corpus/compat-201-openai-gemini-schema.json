@@ -1,0 +1,33 @@
+{
+  "name": "Gemini schema sanitizer 递归收窄 JSON Schema",
+  "category": "compat",
+  "operation": "openai-chat-sanitize-schema",
+  "recorded": true,
+  "input": {
+    "schema": {
+      "$schema": "draft",
+      "type": "object",
+      "properties": {
+        "loose": { "type": "object", "properties": {} },
+        "choice": { "type": ["string", "null"], "const": "x", "minLength": 1 },
+        "union": { "anyOf": [{ "type": "string" }, { "type": "number" }] },
+        "reference": { "$ref": "#/$defs/item" },
+        "count": { "type": "number", "minimum": 0, "exclusiveMaximum": 10 }
+      },
+      "required": ["loose", "choice", "union", "reference", "count"],
+      "$defs": { "item": { "type": "string" } },
+      "additionalProperties": false
+    }
+  },
+  "expected": {
+    "type": "OBJECT",
+    "properties": {
+      "loose": {},
+      "choice": { "type": "STRING", "nullable": true, "enum": ["x"] },
+      "union": {},
+      "reference": {},
+      "count": { "type": "NUMBER", "minimum": 0 }
+    },
+    "required": ["loose", "choice", "union", "reference", "count"]
+  }
+}

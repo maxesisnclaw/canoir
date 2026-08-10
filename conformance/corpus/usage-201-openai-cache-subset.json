@@ -1,0 +1,28 @@
+{
+  "name": "Chat Completions cached token 不重复计入输入",
+  "category": "usage",
+  "operation": "openai-chat-decode",
+  "recorded": true,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "response": {
+      "choices": [{ "message": { "content": "done" }, "finish_reason": "stop" }],
+      "usage": {
+        "prompt_tokens": 100,
+        "completion_tokens": 10,
+        "prompt_tokens_details": { "cached_tokens": 70 }
+      }
+    }
+  },
+  "expected": {
+    "message": { "role": "assistant", "content": [{ "type": "text", "text": "done" }] },
+    "usage": { "totalInputTokens": 100, "outputTokens": 10, "reliable": true },
+    "stopReason": "stop",
+    "notices": []
+  }
+}
