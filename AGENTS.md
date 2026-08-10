@@ -103,8 +103,8 @@ canoir/
 - tool_use input 三种兼容形态解析（A5，`anthropic.ts:1068-1103`）
 - 相邻 user 合并（A3，`anthropic.ts:547-558`）
 - usage 非标准位置回填：message_start 全 0 占位 + message_delta 真值（GLM-5.2 兼容端点实证，B2）
-- thinking 流式：signature_delta 排序在 thinking_delta 之后的乱序处理（宿主项目 `b21891c`）；thinking 回放的 interleaved 约束（宿主项目 `76da9c6`/`05b3374`）
-- 严格 proxy 的 minimal mode（去掉 proxy 不认的字段，`4762ab3`/`3578aa8`）
+- thinking 流式：signature_delta 排序在 thinking_delta 之后的乱序处理（宿主项目 `b21891c`）；thinking 回放的 interleaved 约束（宿主项目 `1c09e2e`）
+- 严格 proxy 的 minimal mode（去掉 proxy 不认的字段，`f09a87a`）
 - refusal：HTTP 200 ≠ 成功，stop_reason 驱动错误分类，partial 文本丢弃（J1，`ca11797`）
 
 **OpenAI Chat Completions**

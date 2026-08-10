@@ -1,0 +1,19 @@
+{
+  "name": "Anthropic JSON 编码安全转义 lone surrogate",
+  "category": "compat",
+  "operation": "anthropic-stringify",
+  "input": {
+    "body": {
+      "model": "model-a",
+      "max_tokens": 32,
+      "messages": [
+        { "role": "user", "content": [{ "type": "text", "text": "\ud800" }] }
+      ],
+      "stream": false
+    }
+  },
+  "expected": {
+    "containsEscapedLoneSurrogate": true,
+    "containsReplacementBytes": false
+  }
+}

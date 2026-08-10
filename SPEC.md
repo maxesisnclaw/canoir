@@ -190,6 +190,8 @@ interface ProviderCapability {
 
 字段缺失按最保守值处理：布尔值为 `false`，`document='unsupported'`，`thinking='unsupported'`，`hostedTools=[]`。未知 hosted tool 不得发送。
 
+`thinking='disabled-param'` 表示关闭 thinking 时必须发送目标 API 的显式 disabled 参数；host 的 `off` 字符串不得原样进入 wire。`thinking='unsupported'` 时不得发送 thinking 控制参数或回放 thinking block。
+
 ### 3.2 降级记录
 
 每次请求侧过滤或降级都产生 host 可读记录：

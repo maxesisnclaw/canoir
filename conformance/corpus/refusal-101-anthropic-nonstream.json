@@ -1,0 +1,32 @@
+{
+  "name": "Anthropic HTTP 200 refusal 分类为错误",
+  "category": "refusal",
+  "operation": "anthropic-decode",
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key"
+    },
+    "response": {
+      "content": [],
+      "stop_reason": "refusal",
+      "stop_details": {
+        "type": "refusal",
+        "category": "policy",
+        "explanation": "request declined"
+      },
+      "usage": { "input_tokens": 12, "output_tokens": 0 }
+    }
+  },
+  "expected": {
+    "error": {
+      "name": "AnthropicRefusalError",
+      "category": "policy",
+      "explanation": "request declined",
+      "partialChars": 0,
+      "usage": { "totalInputTokens": 12, "outputTokens": 0, "reliable": true }
+    }
+  }
+}

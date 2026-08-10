@@ -1,0 +1,37 @@
+{
+  "name": "Anthropic 解码 JSON string input 工具调用",
+  "category": "toolcall",
+  "operation": "anthropic-decode",
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key"
+    },
+    "response": {
+      "content": [
+        { "type": "tool_use", "id": "call-1", "name": "lookup", "input": "{\"query\":\"canoe\"}" }
+      ],
+      "stop_reason": "tool_use",
+      "usage": { "input_tokens": 10, "output_tokens": 4 }
+    }
+  },
+  "expected": {
+    "message": {
+      "role": "assistant",
+      "content": [
+        { "type": "tool_call", "id": "call-1", "name": "lookup", "arguments": { "query": "canoe" } },
+        {
+          "type": "provider_blocks",
+          "providerId": "provider-x",
+          "blocks": [
+            { "type": "tool_use", "id": "call-1", "name": "lookup", "input": "{\"query\":\"canoe\"}" }
+          ]
+        }
+      ]
+    },
+    "usage": { "totalInputTokens": 10, "outputTokens": 4, "reliable": true },
+    "stopReason": "tool_use"
+  }
+}

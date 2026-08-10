@@ -1,0 +1,36 @@
+{
+  "name": "Anthropic SSE 中断时丢弃未闭合 thinking",
+  "category": "thinking",
+  "operation": "anthropic-decode-stream",
+  "recorded": true,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key"
+    },
+    "events": [
+      {
+        "event": "message_start",
+        "data": {
+          "type": "message_start",
+          "message": { "content": [], "stop_reason": null, "usage": { "input_tokens": 5, "output_tokens": 0 } }
+        }
+      },
+      {
+        "event": "content_block_start",
+        "data": { "type": "content_block_start", "index": 0, "content_block": { "type": "thinking", "thinking": "", "signature": "" } }
+      },
+      {
+        "event": "content_block_delta",
+        "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "partial" } }
+      }
+    ]
+  },
+  "expected": {
+    "message": { "role": "assistant", "content": [] },
+    "usage": { "totalInputTokens": 5, "outputTokens": 0, "reliable": true },
+    "stopReason": null
+  }
+}

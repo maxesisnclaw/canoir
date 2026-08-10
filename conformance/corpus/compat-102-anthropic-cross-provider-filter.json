@@ -1,0 +1,64 @@
+{
+  "name": "Anthropic 编码过滤外部 provider-bound block",
+  "category": "compat",
+  "operation": "anthropic-encode",
+  "input": {
+    "config": {
+      "providerId": "provider-y",
+      "model": "model-b",
+      "endpoint": "https://endpoint-b.example/v1/messages",
+      "apiKey": "test-key",
+      "compatMode": "minimal"
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "start" }] },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "foreign",
+            "signature": "sig-x",
+            "providerId": "provider-x"
+          },
+          { "type": "text", "text": "visible" },
+          { "type": "tool_call", "id": "call-1", "name": "lookup", "arguments": {} },
+          {
+            "type": "provider_blocks",
+            "providerId": "provider-x",
+            "blocks": [{ "type": "thinking", "thinking": "raw", "signature": "sig-raw" }]
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [{ "type": "tool_result", "toolCallId": "call-1", "content": "ok" }]
+      }
+    ]
+  },
+  "expected": {
+    "model": "model-b",
+    "max_tokens": 32000,
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "start" }] },
+      {
+        "role": "assistant",
+        "content": [
+          { "type": "text", "text": "visible" },
+          { "type": "tool_use", "id": "call-1", "name": "lookup", "input": {} }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "call-1",
+            "content": [{ "type": "text", "text": "ok" }]
+          }
+        ]
+      }
+    ],
+    "stream": true
+  }
+}

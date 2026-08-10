@@ -1,0 +1,67 @@
+{
+  "name": "Anthropic tool result 图片编码为原生 block",
+  "category": "structure",
+  "operation": "anthropic-encode",
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key",
+      "compatMode": "minimal"
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "inspect" }] },
+      {
+        "role": "assistant",
+        "content": [
+          { "type": "tool_call", "id": "call-1", "name": "capture", "arguments": {} }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          {
+            "type": "tool_result",
+            "toolCallId": "call-1",
+            "content": "image result",
+            "images": [
+              {
+                "type": "image",
+                "source": { "type": "base64", "mediaType": "image/png", "data": "aW1hZ2U=" }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "max_tokens": 32000,
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "inspect" }] },
+      {
+        "role": "assistant",
+        "content": [{ "type": "tool_use", "id": "call-1", "name": "capture", "input": {} }]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "call-1",
+            "content": [
+              {
+                "type": "image",
+                "source": { "type": "base64", "media_type": "image/png", "data": "aW1hZ2U=" }
+              },
+              { "type": "text", "text": "image result" }
+            ]
+          }
+        ]
+      }
+    ],
+    "stream": true
+  }
+}

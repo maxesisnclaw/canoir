@@ -4,7 +4,7 @@
 
 A protocol middle layer for multi-LLM-API agent harnesses: canonical message IR, codecs, capability negotiation, and a conformance corpus.
 
-**Status**: early development（M1 已完成：IR 类型与基础序列校验器可用；codec 尚未实现，不可用于生产）。协议规范见 [SPEC.md](SPEC.md)，实现约束见 [AGENTS.md](AGENTS.md)。
+**Status**: early development（M2 已完成：IR、序列校验器与 Anthropic Messages codec 可用；OpenAI codec 与 capability 矩阵尚未实现，不可用于生产）。协议规范见 [SPEC.md](SPEC.md)，实现约束见 [AGENTS.md](AGENTS.md)。
 
 ## License
 

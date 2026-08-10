@@ -1,0 +1,79 @@
+{
+  "name": "Anthropic 同 provider interleaved block 原样回放",
+  "category": "thinking",
+  "operation": "anthropic-encode",
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key",
+      "compatMode": "minimal"
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "start" }] },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "flat",
+            "signature": "sig-flat",
+            "providerId": "provider-x"
+          },
+          { "type": "tool_call", "id": "call-a", "name": "first", "arguments": {} },
+          { "type": "tool_call", "id": "call-b", "name": "second", "arguments": {} },
+          {
+            "type": "provider_blocks",
+            "providerId": "provider-x",
+            "blocks": [
+              { "type": "thinking", "thinking": "step one", "signature": "sig-1" },
+              { "type": "tool_use", "id": "call-a", "name": "first", "input": {} },
+              { "type": "thinking", "thinking": "step two", "signature": "sig-2" },
+              { "type": "tool_use", "id": "call-b", "name": "second", "input": {} }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          { "type": "tool_result", "toolCallId": "call-a", "content": "a" },
+          { "type": "tool_result", "toolCallId": "call-b", "content": "b" }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "max_tokens": 32000,
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "start" }] },
+      {
+        "role": "assistant",
+        "content": [
+          { "type": "thinking", "thinking": "step one", "signature": "sig-1" },
+          { "type": "tool_use", "id": "call-a", "name": "first", "input": {} },
+          { "type": "thinking", "thinking": "step two", "signature": "sig-2" },
+          { "type": "tool_use", "id": "call-b", "name": "second", "input": {} }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "call-a",
+            "content": [{ "type": "text", "text": "a" }]
+          },
+          {
+            "type": "tool_result",
+            "tool_use_id": "call-b",
+            "content": [{ "type": "text", "text": "b" }]
+          }
+        ]
+      }
+    ],
+    "stream": true
+  }
+}

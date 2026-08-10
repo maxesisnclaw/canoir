@@ -1,0 +1,21 @@
+{
+  "name": "Anthropic 缺失工具 ID 时稳定合成",
+  "category": "toolcall",
+  "operation": "anthropic-decode-stability",
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key"
+    },
+    "response": {
+      "content": [
+        { "type": "tool_use", "id": "", "name": "lookup", "input": { "query": "canoe" } }
+      ],
+      "stop_reason": "tool_use",
+      "usage": { "input_tokens": 10, "output_tokens": 4 }
+    }
+  },
+  "expected": { "nonEmpty": true, "stable": true }
+}

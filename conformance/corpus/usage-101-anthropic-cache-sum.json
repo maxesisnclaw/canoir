@@ -1,0 +1,38 @@
+{
+  "name": "Anthropic usage 累加 cache read 与 creation",
+  "category": "usage",
+  "operation": "anthropic-decode",
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key"
+    },
+    "response": {
+      "content": [{ "type": "text", "text": "ok" }],
+      "stop_reason": "end_turn",
+      "usage": {
+        "input_tokens": 10,
+        "output_tokens": 5,
+        "cache_creation_input_tokens": 3,
+        "cache_read_input_tokens": 4
+      }
+    }
+  },
+  "expected": {
+    "message": {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "ok" },
+        {
+          "type": "provider_blocks",
+          "providerId": "provider-x",
+          "blocks": [{ "type": "text", "text": "ok" }]
+        }
+      ]
+    },
+    "usage": { "totalInputTokens": 17, "outputTokens": 5, "reliable": true },
+    "stopReason": "end_turn"
+  }
+}

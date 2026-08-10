@@ -1,0 +1,64 @@
+{
+  "name": "Anthropic 合并相邻 tool result 与 user 消息",
+  "category": "structure",
+  "operation": "anthropic-encode",
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key",
+      "compatMode": "minimal"
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "start" }] },
+      {
+        "role": "assistant",
+        "content": [
+          { "type": "tool_call", "id": "call-a", "name": "first", "arguments": {} },
+          { "type": "tool_call", "id": "call-b", "name": "second", "arguments": {} }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [{ "type": "tool_result", "toolCallId": "call-a", "content": "a" }]
+      },
+      {
+        "role": "tool",
+        "content": [{ "type": "tool_result", "toolCallId": "call-b", "content": "b" }]
+      },
+      { "role": "user", "content": [{ "type": "text", "text": "continue" }] }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "max_tokens": 32000,
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "start" }] },
+      {
+        "role": "assistant",
+        "content": [
+          { "type": "tool_use", "id": "call-a", "name": "first", "input": {} },
+          { "type": "tool_use", "id": "call-b", "name": "second", "input": {} }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "call-a",
+            "content": [{ "type": "text", "text": "a" }]
+          },
+          {
+            "type": "tool_result",
+            "tool_use_id": "call-b",
+            "content": [{ "type": "text", "text": "b" }]
+          },
+          { "type": "text", "text": "continue" }
+        ]
+      }
+    ],
+    "stream": true
+  }
+}

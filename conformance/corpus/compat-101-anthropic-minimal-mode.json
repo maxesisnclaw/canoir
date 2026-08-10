@@ -1,0 +1,66 @@
+{
+  "name": "Anthropic strict proxy minimal mode 移除非必要字段",
+  "category": "compat",
+  "operation": "anthropic-encode",
+  "input": {
+    "includeHeaders": true,
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key",
+      "compatMode": "minimal",
+      "headers": {
+        "User-Agent": "sdk-client/1",
+        "X-Stainless-Runtime": "js",
+        "X-Custom": "keep"
+      }
+    },
+    "options": {
+      "system": "system",
+      "stream": false,
+      "tools": [
+        {
+          "name": "echo",
+          "description": "echo text",
+          "inputSchema": {
+            "type": "object",
+            "properties": { "text": { "type": "string" } },
+            "required": ["text"]
+          }
+        }
+      ]
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "hello" }] }
+    ]
+  },
+  "expected": {
+    "body": {
+      "model": "model-a",
+      "max_tokens": 32000,
+      "messages": [
+        { "role": "user", "content": [{ "type": "text", "text": "hello" }] }
+      ],
+      "stream": false,
+      "system": "system",
+      "tools": [
+        {
+          "name": "echo",
+          "description": "echo text",
+          "input_schema": {
+            "type": "object",
+            "properties": { "text": { "type": "string" } },
+            "required": ["text"]
+          }
+        }
+      ]
+    },
+    "headers": {
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+      "x-api-key": "test-key",
+      "x-custom": "keep"
+    }
+  }
+}

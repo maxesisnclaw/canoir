@@ -1,0 +1,27 @@
+{
+  "name": "Anthropic thinking off 映射为 disabled 参数",
+  "category": "thinking",
+  "operation": "anthropic-encode",
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key",
+      "compatMode": "minimal"
+    },
+    "options": { "thinking": { "type": "off" } },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "hello" }] }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "max_tokens": 32000,
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "hello" }] }
+    ],
+    "stream": true,
+    "thinking": { "type": "disabled" }
+  }
+}

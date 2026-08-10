@@ -1,0 +1,65 @@
+{
+  "name": "Anthropic SSE 从 message delta 回填真实 usage",
+  "category": "stream",
+  "operation": "anthropic-decode-stream",
+  "recorded": true,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key"
+    },
+    "events": [
+      {
+        "event": "message_start",
+        "data": {
+          "type": "message_start",
+          "message": {
+            "content": [],
+            "stop_reason": null,
+            "usage": {
+              "input_tokens": 0,
+              "output_tokens": 0,
+              "cache_creation_input_tokens": 0,
+              "cache_read_input_tokens": 0
+            }
+          }
+        }
+      },
+      {
+        "event": "content_block_start",
+        "data": { "type": "content_block_start", "index": 0, "content_block": { "type": "text", "text": "" } }
+      },
+      {
+        "event": "content_block_delta",
+        "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "text_delta", "text": "hi" } }
+      },
+      { "event": "content_block_stop", "data": { "type": "content_block_stop", "index": 0 } },
+      {
+        "event": "message_delta",
+        "data": {
+          "type": "message_delta",
+          "delta": { "stop_reason": "end_turn" },
+          "usage": { "input_tokens": 13, "output_tokens": 16 }
+        }
+      },
+      { "event": "message_stop", "data": { "type": "message_stop" } }
+    ]
+  },
+  "expected": {
+    "message": {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "hi" },
+        {
+          "type": "provider_blocks",
+          "providerId": "provider-x",
+          "blocks": [{ "type": "text", "text": "hi" }]
+        }
+      ]
+    },
+    "usage": { "totalInputTokens": 13, "outputTokens": 16, "reliable": true },
+    "stopReason": "end_turn"
+  }
+}
