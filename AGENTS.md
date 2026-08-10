@@ -118,7 +118,7 @@ canoir/
 - thought_signature 类非标准字段必须回传，不得丢弃（C5）
 
 **Gemini schema（经 Completions 兼容层）**
-- 嵌套 object 无 properties、type 数组、`$ref`/anyOf 等负例集（C6，`baa9b9d`/`2d41004`/`28c08a4`/`e27c93e`）
+- 嵌套 object 无 properties、type 数组、`$ref`/anyOf 等负例集（C6，`ef35c71`/`baa9b9d`/`2d41004`/`28c08a4`）
 
 ## 6. Capability 矩阵与降级策略
 
@@ -204,4 +204,7 @@ hook 本身随仓库公开维护。被拦时不允许绕过（`--no-verify` 视�
 - 所有注释、commit message、文档：中文（SPEC.md/README 的对外语言由项目 owner 另行决定，初版中文即可）
 - 每个里程碑一个 commit 或一组小 commit，message 写清"为什么"而不只是"做了什么"
 - 遇到 §5 标注 🔬（待实测验证）的条目：设计实验实测，把结果写成语料，并在 SPEC.md 把该条从"待验证"改为实证结论。**禁止**把 🔬 条目当已验证知识直接编码
-- 你不拥有需求决策权。发现本文件与现实矛盾、或认为某条规则错了：停下来，在回复中明确提出，等 owner 裁决。不要静默绕过
+- 事实性偏差自行修正，不停下：commit 引用、file:line、API 行为描述等可验证错误（包括本文件中的错误），经源码、测试或实测确认后直接修正，并在 commit message 写明验证依据
+- 需要停下裁决的仅限：需求/范围/spec 语义冲突、规则本身存废、实测结果与 spec 矛盾且改 spec 会影响里程碑结构。不要静默绕过
+- 裁决请求以本仓库 GitHub issue 为 state layer：issue 必须自包含陈述冲突点与建议方案，裁决以 issue comment 给出。issue 状态变化后，用 `wake_channel` 通知对方 channel；实现 agent 提问时通知 `AGENTS.local.md` 指定的 owner 裁决 channel，message 只带 issue 指针与一句话摘要，不展开讨论
+- 裁决 issue 遵守 §9 同等的公开去标识纪律：不出现内部域名、路径、私有仓库名或内部命名；commit 仅引用裸 hash，不附私有 remote 链接
