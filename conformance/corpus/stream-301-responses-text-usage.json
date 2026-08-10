@@ -40,7 +40,12 @@
         }
       ]
     },
-    "usage": { "totalInputTokens": 10, "outputTokens": 3, "reliable": true },
+    "usage": {
+      "totalInputTokens": 10,
+      "outputTokens": 3,
+      "reliable": true,
+      "cacheReadTokens": 4
+    },
     "stopReason": "completed"
   }
 }

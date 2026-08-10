@@ -11,6 +11,7 @@ import {
   applyCapability,
   CapabilityError,
   normalizeCapability,
+  resolvePromptCacheAnchors,
   type CapabilityTransformOptions,
   type DegradationRecord,
   type ProviderCapability,
@@ -469,6 +470,18 @@ export function encodeOpenAIChatRequest(
 
   const capability = normalizeCapability(config.capability)
   const transformed = applyCapability(messages, capability, options)
+  const degradations = [...transformed.degradations]
+  const promptCacheAnchors = resolvePromptCacheAnchors(
+    options.promptCache,
+    capability,
+    degradations,
+  )
+  if (promptCacheAnchors.length > 0) {
+    throw new CapabilityError(
+      'prompt_cache_markers_unsupported',
+      'OpenAI Chat Completions codec 不支持显式 prompt cache marker',
+    )
+  }
   const encoded = encodeMessages(transformed.messages)
   const requestMessages: OpenAIChatWireMessage[] = []
   if (options.system !== undefined) {
@@ -518,7 +531,7 @@ export function encodeOpenAIChatRequest(
     headers: buildHeaders(config),
     body,
     notices: encoded.notices,
-    degradations: transformed.degradations,
+    degradations,
   }
 }
 
@@ -530,13 +543,32 @@ function numberField(value: unknown, key: string): number {
     : 0
 }
 
+function optionalNumberField(value: unknown, key: string): number | undefined {
+  if (!isRecord(value)) return undefined
+  const field = value[key]
+  return typeof field === 'number' && Number.isInteger(field) && field >= 0
+    ? field
+    : undefined
+}
+
 function decodeUsage(value: unknown): Usage {
   const totalInputTokens = numberField(value, 'prompt_tokens')
   const outputTokens = numberField(value, 'completion_tokens')
+  const cacheReadTokens = isRecord(value)
+    ? optionalNumberField(value.prompt_tokens_details, 'cached_tokens')
+    : undefined
+  const reasoningTokens = isRecord(value)
+    ? optionalNumberField(
+        value.completion_tokens_details,
+        'reasoning_tokens',
+      )
+    : undefined
   return {
     totalInputTokens,
     outputTokens,
     reliable: totalInputTokens > 0 || outputTokens > 0,
+    ...(cacheReadTokens === undefined ? {} : { cacheReadTokens }),
+    ...(reasoningTokens === undefined ? {} : { reasoningTokens }),
   }
 }
 

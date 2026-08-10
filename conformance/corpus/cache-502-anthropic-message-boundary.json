@@ -1,0 +1,40 @@
+{
+  "name": "Anthropic message cache anchor 跟随合并前 IR 边界",
+  "category": "cache",
+  "operation": "anthropic-encode",
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key"
+    },
+    "options": {
+      "promptCache": {
+        "anchors": [{ "kind": "message", "nthFromEnd": 2 }]
+      }
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "first" }] },
+      { "role": "user", "content": [{ "type": "text", "text": "second" }] }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "max_tokens": 32000,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "first",
+            "cache_control": { "type": "ephemeral" }
+          },
+          { "type": "text", "text": "second" }
+        ]
+      }
+    ],
+    "stream": true
+  }
+}

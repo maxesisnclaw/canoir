@@ -34,7 +34,12 @@
       "name": "ResponseDegradationError",
       "code": "runaway_thinking",
       "stopReason": "completed",
-      "usage": { "totalInputTokens": 28, "outputTokens": 1040, "reliable": true }
+      "usage": {
+        "totalInputTokens": 28,
+        "outputTokens": 1040,
+        "reliable": true,
+        "reasoningTokens": 1034
+      }
     }
   }
 }

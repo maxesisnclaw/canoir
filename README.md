@@ -1,6 +1,6 @@
 # CanoIR
 
-多 LLM API 的协议中间层：统一消息模型（Canonical IR）、三家 API 编解码（Anthropic Messages / OpenAI Chat Completions / OpenAI Responses）、provider 能力协商与降级、conformance 语料。供 agent harness 作为中间组件接入。
+多 LLM API 的协议中间层：统一消息模型（Canonical IR）、三家 API 编解码（Anthropic Messages / OpenAI Chat Completions / OpenAI Responses）、provider 能力协商与降级、缓存计量分解与 encode 期 cache hint、conformance 语料。供 agent harness 作为中间组件接入。
 
 A protocol middle layer for multi-LLM-API agent harnesses: canonical message IR, codecs, capability negotiation, and a conformance corpus.
 
@@ -22,6 +22,7 @@ const codec = new OpenAIResponsesCodec({
     toolCalls: true,
     thinking: 'native',
     thinkingReplay: 'verify-replay',
+    promptCaching: 'automatic',
     streaming: true,
   },
 })

@@ -2,6 +2,7 @@ import {
   applyCapability,
   CapabilityError,
   normalizeCapability,
+  resolvePromptCacheAnchors,
   type CapabilityTransformOptions,
   type DegradationRecord,
   type ProviderCapability,
@@ -442,6 +443,17 @@ export function encodeOpenAIResponsesRequest(
   }
   const transformed = applyCapability(messages, capability, options)
   const degradations = [...transformed.degradations]
+  const promptCacheAnchors = resolvePromptCacheAnchors(
+    options.promptCache,
+    capability,
+    degradations,
+  )
+  if (promptCacheAnchors.length > 0) {
+    throw new CapabilityError(
+      'prompt_cache_markers_unsupported',
+      'OpenAI Responses codec 不支持显式 prompt cache marker',
+    )
+  }
   const input = encodeInput(
     transformed.messages,
     config.providerId,
@@ -516,6 +528,14 @@ function numberField(value: unknown, key: string): number {
     : 0
 }
 
+function optionalNumberField(value: unknown, key: string): number | undefined {
+  if (!isRecord(value)) return undefined
+  const field = value[key]
+  return typeof field === 'number' && Number.isInteger(field) && field >= 0
+    ? field
+    : undefined
+}
+
 export function assembleOpenAIResponsesSse(
   events: readonly OpenAIResponsesSseEvent[],
   providerId: string,
@@ -538,7 +558,8 @@ export function assembleOpenAIResponsesSse(
   let inputTokens = 0
   let outputTokens = 0
   let stopReason: string | null = null
-  let thinkingTokens = 0
+  let cacheReadTokens: number | undefined
+  let reasoningTokenCount: number | undefined
   const observed: StreamObservation = {
     text: false,
     toolCall: false,
@@ -690,7 +711,11 @@ export function assembleOpenAIResponsesSse(
         inputTokens = numberField(data.response.usage, 'input_tokens')
         outputTokens = numberField(data.response.usage, 'output_tokens')
         if (isRecord(data.response.usage)) {
-          thinkingTokens = numberField(
+          cacheReadTokens = optionalNumberField(
+            data.response.usage.input_tokens_details,
+            'cached_tokens',
+          )
+          reasoningTokenCount = optionalNumberField(
             data.response.usage.output_tokens_details,
             'reasoning_tokens',
           )
@@ -716,6 +741,16 @@ export function assembleOpenAIResponsesSse(
         if (!isRecord(data.response)) break
         inputTokens = numberField(data.response.usage, 'input_tokens')
         outputTokens = numberField(data.response.usage, 'output_tokens')
+        if (isRecord(data.response.usage)) {
+          cacheReadTokens = optionalNumberField(
+            data.response.usage.input_tokens_details,
+            'cached_tokens',
+          )
+          reasoningTokenCount = optionalNumberField(
+            data.response.usage.output_tokens_details,
+            'reasoning_tokens',
+          )
+        }
         const reason = isRecord(data.response.incomplete_details)
           ? data.response.incomplete_details.reason
           : undefined
@@ -824,12 +859,18 @@ export function assembleOpenAIResponsesSse(
       totalInputTokens: inputTokens,
       outputTokens,
       reliable: inputTokens > 0 || outputTokens > 0,
+      ...(cacheReadTokens === undefined ? {} : { cacheReadTokens }),
+      ...(reasoningTokenCount === undefined
+        ? {}
+        : { reasoningTokens: reasoningTokenCount }),
     },
     stopReason,
   }
   assertResponseNotDegraded(result.message, result.usage, stopReason, {
     ...degradation,
-    ...(thinkingTokens > 0 ? { thinkingTokens } : {}),
+    ...(reasoningTokenCount === undefined
+      ? {}
+      : { thinkingTokens: reasoningTokenCount }),
     streamObserved: observed,
   })
   return result

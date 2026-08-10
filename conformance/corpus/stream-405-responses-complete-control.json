@@ -44,7 +44,12 @@
         }
       ]
     },
-    "usage": { "totalInputTokens": 50, "outputTokens": 961, "reliable": true },
+    "usage": {
+      "totalInputTokens": 50,
+      "outputTokens": 961,
+      "reliable": true,
+      "reasoningTokens": 516
+    },
     "stopReason": "completed"
   }
 }

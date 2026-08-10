@@ -13,13 +13,33 @@ export interface ProviderCapability {
   toolCalls: boolean
   thinking: 'native' | 'disabled-param' | 'unsupported'
   thinkingReplay: 'verify-replay' | 'replay' | 'drop'
+  promptCaching: 'explicit-markers' | 'automatic' | 'none'
   streaming: boolean
   hostedTools?: string[]
 }
 
+export type PromptCacheAnchor =
+  | { kind: 'system' }
+  | { kind: 'tools' }
+  | { kind: 'history' }
+  | { kind: 'message'; nthFromEnd: number }
+
+export interface PromptCacheHint {
+  anchors: PromptCacheAnchor[]
+}
+
 export interface DegradationRecord {
-  blockType: 'image' | 'document' | 'thinking' | 'provider_blocks'
-  action: 'filtered' | 'document-to-images' | 'document-to-text'
+  blockType:
+    | 'image'
+    | 'document'
+    | 'thinking'
+    | 'provider_blocks'
+    | 'prompt_cache'
+  action:
+    | 'filtered'
+    | 'document-to-images'
+    | 'document-to-text'
+    | 'cache-hint-ignored'
   reason: string
 }
 
@@ -31,6 +51,7 @@ export interface DocumentConverters {
 export interface CapabilityTransformOptions {
   documentConverters?: DocumentConverters
   preferDocumentImages?: boolean
+  promptCache?: PromptCacheHint
 }
 
 export interface CapabilityTransformResult {
@@ -46,6 +67,92 @@ export class CapabilityError extends Error {
     this.name = 'CapabilityError'
     this.code = code
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function promptCacheAnchorKey(anchor: PromptCacheAnchor): string {
+  return anchor.kind === 'message'
+    ? `message:${anchor.nthFromEnd}`
+    : anchor.kind
+}
+
+export function resolvePromptCacheAnchors(
+  hint: PromptCacheHint | undefined,
+  capability: ProviderCapability,
+  degradations: DegradationRecord[],
+): PromptCacheAnchor[] {
+  if (hint === undefined) return []
+  if (!isRecord(hint) || !Array.isArray(hint.anchors)) {
+    throw new CapabilityError(
+      'invalid_prompt_cache_hint',
+      'promptCache 必须包含 anchors 数组',
+    )
+  }
+
+  const anchors: PromptCacheAnchor[] = []
+  const seen = new Set<string>()
+  for (const value of hint.anchors) {
+    if (!isRecord(value)) {
+      throw new CapabilityError(
+        'invalid_prompt_cache_anchor',
+        'prompt cache anchor 必须包含 kind',
+      )
+    }
+    const raw = value as Record<string, unknown>
+    if (typeof raw.kind !== 'string') {
+      throw new CapabilityError(
+        'invalid_prompt_cache_anchor',
+        'prompt cache anchor 必须包含 kind',
+      )
+    }
+    let anchor: PromptCacheAnchor
+    if (
+      raw.kind === 'system' ||
+      raw.kind === 'tools' ||
+      raw.kind === 'history'
+    ) {
+      anchor = { kind: raw.kind }
+    } else if (raw.kind === 'message') {
+      if (
+        typeof raw.nthFromEnd !== 'number' ||
+        !Number.isInteger(raw.nthFromEnd) ||
+        raw.nthFromEnd <= 0
+      ) {
+        throw new CapabilityError(
+          'invalid_prompt_cache_anchor',
+          'message cache anchor 的 nthFromEnd 必须是正整数',
+        )
+      }
+      anchor = { kind: 'message', nthFromEnd: raw.nthFromEnd }
+    } else {
+      throw new CapabilityError(
+        'invalid_prompt_cache_anchor',
+        `未知 prompt cache anchor: ${raw.kind}`,
+      )
+    }
+    const key = promptCacheAnchorKey(anchor)
+    if (!seen.has(key)) {
+      seen.add(key)
+      anchors.push(anchor)
+    }
+  }
+
+  if (anchors.length === 0) return []
+  if (capability.promptCaching !== 'explicit-markers') {
+    degradations.push({
+      blockType: 'prompt_cache',
+      action: 'cache-hint-ignored',
+      reason:
+        capability.promptCaching === 'automatic'
+          ? '目标 provider 自动管理 prompt cache，忽略显式锚点'
+          : '目标 provider 不支持 prompt cache，忽略缓存锚点',
+    })
+    return []
+  }
+  return anchors
 }
 
 export function normalizeCapability(
@@ -68,6 +175,11 @@ export function normalizeCapability(
       capability.thinkingReplay === 'replay'
         ? capability.thinkingReplay
         : 'drop',
+    promptCaching:
+      capability.promptCaching === 'explicit-markers' ||
+      capability.promptCaching === 'automatic'
+        ? capability.promptCaching
+        : 'none',
     streaming: capability.streaming === true,
     ...(capability.hostedTools === undefined
       ? {}

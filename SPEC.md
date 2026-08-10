@@ -167,13 +167,19 @@ interface Usage {
   totalInputTokens: number
   outputTokens: number
   reliable: boolean
+  cacheReadTokens?: number
+  cacheCreationTokens?: number
+  reasoningTokens?: number
 }
 ```
 
 - 所有 token 数必须是非负整数。
 - Anthropic 的 `totalInputTokens` 等于 `input_tokens + cache_read_input_tokens + cache_creation_input_tokens`，缺失项按 0 计。
 - OpenAI Chat Completions 与 Responses 使用 API 给出的单次 input 总值，不与 cached token 字段叠加。
+- `cacheReadTokens` 映射 Anthropic `cache_read_input_tokens` 或 OpenAI `cached_tokens`；`cacheCreationTokens` 映射 Anthropic `cache_creation_input_tokens`；`reasoningTokens` 映射各 API 的 reasoning/thinking token 明细。
+- Provider 没有返回某项分解数据时字段必须缺省；明确返回 0 时保留 0。不得用推测值补齐分解字段。
 - 全 0 占位、字段缺失或 provider 明示估算值时，`reliable=false`。上层不得用不可靠 usage 覆盖已知可靠状态。
+- Usage 只表达 token 计量，不表达价格或金额。定价属于 host 配置，CanoIR 不计算费用。
 
 ## 3. Capability 与降级记录
 
@@ -188,12 +194,13 @@ interface ProviderCapability {
   toolCalls: boolean
   thinking: 'native' | 'disabled-param' | 'unsupported'
   thinkingReplay: 'verify-replay' | 'replay' | 'drop'
+  promptCaching: 'explicit-markers' | 'automatic' | 'none'
   streaming: boolean
   hostedTools?: string[]
 }
 ```
 
-字段缺失按最保守值处理：布尔值为 `false`，`document='unsupported'`，`thinking='unsupported'`，`thinkingReplay='drop'`，`hostedTools=[]`。未知 hosted tool 不得发送。
+字段缺失按最保守值处理：布尔值为 `false`，`document='unsupported'`，`thinking='unsupported'`，`thinkingReplay='drop'`，`promptCaching='none'`，`hostedTools=[]`。未知 hosted tool 不得发送。
 
 `thinking` 只描述端点的 thinking 控制参数：`disabled-param` 表示关闭 thinking 时必须发送目标 API 的显式 disabled 参数；host 的 `off` 字符串不得原样进入 wire；`unsupported` 时不得发送 thinking 控制参数。
 
@@ -205,14 +212,20 @@ interface ProviderCapability {
 
 Capability 在 codec constructor 中固定。运行中实测发现端点能力与声明不符时，host 只能通过 `updateCapability()` 显式整体替换；`encode()` 与 `call()` 不接受 per-call capability override。
 
+`promptCaching` 描述请求侧缓存控制机制：
+
+1. `explicit-markers`：codec 可把 encode 期 cache hint 翻译为目标 API 的显式 breakpoint。
+2. `automatic`：provider 自动决定缓存前缀，不接受 CanoIR 显式 marker。
+3. `none`：端点不提供可用的 prompt cache。
+
 ### 3.2 降级记录
 
 每次请求侧过滤或降级都产生 host 可读记录：
 
 ```ts
 interface DegradationRecord {
-  blockType: 'image' | 'document' | 'thinking' | 'provider_blocks'
-  action: 'filtered' | 'document-to-images' | 'document-to-text'
+  blockType: 'image' | 'document' | 'thinking' | 'provider_blocks' | 'prompt_cache'
+  action: 'filtered' | 'document-to-images' | 'document-to-text' | 'cache-hint-ignored'
   reason: string
 }
 ```
@@ -227,6 +240,33 @@ interface DegradationRecord {
 4. `vision=false`：请求侧过滤所有 image block，包括 tool result 附带图片，并记录原因。
 
 转换器必须由真实调用方提供；codec 不伪造图片或文档文本。
+
+### 3.4 Prompt cache hint
+
+Cache breakpoint 是单次请求的优化策略，不是消息语义，不进入 IR block。Host 可在 encode options 传入：
+
+```ts
+type PromptCacheAnchor =
+  | { kind: 'system' }
+  | { kind: 'tools' }
+  | { kind: 'history' }
+  | { kind: 'message'; nthFromEnd: number }
+
+interface PromptCacheHint {
+  anchors: PromptCacheAnchor[]
+}
+```
+
+Anchors 是无序集合，重复值去重：
+
+- `system`：system 内容的最后一个 wire block。
+- `tools`：最后一个 tool definition。
+- `history`：编码后最后一条 message 的最后一个 wire content block。
+- `message`：输入 IR 消息倒序的 1-based 位置；marker 跟随该消息正规化后的最后一个 wire content block，即使相邻消息随后合并也不改变边界。
+
+`nthFromEnd` 非正整数、越界、锚点没有实际 wire target，或实际 breakpoint 数超过目标 API 上限时必须在编码前 fail-loud。Anthropic Messages 当前上限为 4 个实际 breakpoint；多个锚点落到同一 block 时只计一个。没有 hint 时不得隐式添加 marker。
+
+合法 hint 遇到 `automatic` 或 `none` capability 时，codec 保持请求语义与 wire body 不变，并记录 `prompt_cache/cache-hint-ignored`。这是唯一允许静默忽略并记录而不是 fail-loud 的 capability 降级：cache hint 只影响性能和计费，不改变模型可见内容或工具语义。
 
 ## 4. Vendor 协议规范与实测偏差
 
@@ -365,6 +405,7 @@ M5 的每类检测必须由至少一条去标识的真实录制 SSE fixture 验�
 - Codec constructor 接收原始 model ID、providerId、capability 和 provider 所需连接参数；host 的持久化、路由、密钥发现、重试和 UI 类型不得进入 CanoIR。
 - Capability 在 codec 生命周期内稳定；只有 `updateCapability()` 可显式整体替换，任何请求方法都不得提供 per-call override。
 - 请求编码顺序为：校验 IR → 过滤 provider-bound block → capability 门控与降级 → provider 结构正规化 → 生成 wire body。
+- Prompt cache hint 在 provider 结构正规化完成后解析到实际 wire block；不得把 marker 写入 IR 或跨 provider 回放。
 - 响应解码顺序为：解析事件 → 完整组装 block → 归一化 usage/stop reason → 退化检测 → 校验可回放 IR。
 - 失败必须带稳定分类，禁止用空响应、空 object 或伪造 tool result 掩盖协议错误。
 

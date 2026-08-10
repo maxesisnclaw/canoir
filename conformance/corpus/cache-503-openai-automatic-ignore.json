@@ -1,0 +1,37 @@
+{
+  "name": "OpenAI automatic cache 忽略显式锚点并记录",
+  "category": "cache",
+  "operation": "openai-chat-encode",
+  "input": {
+    "includeEnvelope": true,
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "options": {
+      "promptCache": {
+        "anchors": [{ "kind": "history" }]
+      }
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "hello" }] }
+    ]
+  },
+  "expected": {
+    "body": {
+      "model": "model-a",
+      "messages": [{ "role": "user", "content": "hello" }],
+      "stream": false
+    },
+    "notices": [],
+    "degradations": [
+      {
+        "blockType": "prompt_cache",
+        "action": "cache-hint-ignored",
+        "reason": "目标 provider 自动管理 prompt cache，忽略显式锚点"
+      }
+    ]
+  }
+}

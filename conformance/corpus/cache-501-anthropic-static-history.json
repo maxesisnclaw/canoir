@@ -1,0 +1,67 @@
+{
+  "name": "Anthropic cache hint 同时标记 system、tools 与 history",
+  "category": "cache",
+  "operation": "anthropic-encode",
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key"
+    },
+    "options": {
+      "system": "stable system",
+      "tools": [
+        {
+          "name": "lookup",
+          "description": "look up a value",
+          "inputSchema": { "type": "object", "properties": {} }
+        }
+      ],
+      "promptCache": {
+        "anchors": [
+          { "kind": "history" },
+          { "kind": "system" },
+          { "kind": "tools" },
+          { "kind": "message", "nthFromEnd": 1 },
+          { "kind": "system" }
+        ]
+      }
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "hello" }] }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "max_tokens": 32000,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "hello",
+            "cache_control": { "type": "ephemeral" }
+          }
+        ]
+      }
+    ],
+    "stream": true,
+    "system": [
+      {
+        "type": "text",
+        "text": "stable system",
+        "cache_control": { "type": "ephemeral" }
+      }
+    ],
+    "tools": [
+      {
+        "name": "lookup",
+        "description": "look up a value",
+        "input_schema": { "type": "object", "properties": {} },
+        "cache_control": { "type": "ephemeral" }
+      }
+    ]
+  }
+}

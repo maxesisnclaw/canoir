@@ -59,7 +59,13 @@
         }
       ]
     },
-    "usage": { "totalInputTokens": 13, "outputTokens": 16, "reliable": true },
+    "usage": {
+      "totalInputTokens": 13,
+      "outputTokens": 16,
+      "reliable": true,
+      "cacheReadTokens": 0,
+      "cacheCreationTokens": 0
+    },
     "stopReason": "end_turn"
   }
 }

@@ -1,0 +1,27 @@
+{
+  "name": "Anthropic message cache anchor 越界时 fail loud",
+  "category": "cache",
+  "operation": "anthropic-encode",
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key"
+    },
+    "options": {
+      "promptCache": {
+        "anchors": [{ "kind": "message", "nthFromEnd": 2 }]
+      }
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "hello" }] }
+    ]
+  },
+  "expected": {
+    "error": {
+      "name": "CapabilityError",
+      "code": "prompt_cache_anchor_out_of_range"
+    }
+  }
+}

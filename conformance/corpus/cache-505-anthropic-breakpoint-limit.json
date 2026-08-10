@@ -1,0 +1,37 @@
+{
+  "name": "Anthropic cache breakpoint 超过四个时 fail loud",
+  "category": "cache",
+  "operation": "anthropic-encode",
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key"
+    },
+    "options": {
+      "promptCache": {
+        "anchors": [
+          { "kind": "message", "nthFromEnd": 1 },
+          { "kind": "message", "nthFromEnd": 2 },
+          { "kind": "message", "nthFromEnd": 3 },
+          { "kind": "message", "nthFromEnd": 4 },
+          { "kind": "message", "nthFromEnd": 5 }
+        ]
+      }
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "one" }] },
+      { "role": "assistant", "content": [{ "type": "text", "text": "two" }] },
+      { "role": "user", "content": [{ "type": "text", "text": "three" }] },
+      { "role": "assistant", "content": [{ "type": "text", "text": "four" }] },
+      { "role": "user", "content": [{ "type": "text", "text": "five" }] }
+    ]
+  },
+  "expected": {
+    "error": {
+      "name": "CapabilityError",
+      "code": "prompt_cache_breakpoint_limit"
+    }
+  }
+}

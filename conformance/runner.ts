@@ -273,6 +273,11 @@ function providerCapability(
       value.thinkingReplay === 'replay'
         ? value.thinkingReplay
         : 'drop',
+    promptCaching:
+      value.promptCaching === 'explicit-markers' ||
+      value.promptCaching === 'automatic'
+        ? value.promptCaching
+        : 'none',
     streaming: value.streaming === true,
     ...(Array.isArray(value.hostedTools) &&
     value.hostedTools.every((item) => typeof item === 'string')
@@ -287,6 +292,7 @@ const anthropicDefaultCapability: ProviderCapability = {
   toolCalls: true,
   thinking: 'native',
   thinkingReplay: 'verify-replay',
+  promptCaching: 'explicit-markers',
   streaming: true,
 }
 
@@ -296,6 +302,7 @@ const openAIChatDefaultCapability: ProviderCapability = {
   toolCalls: true,
   thinking: 'native',
   thinkingReplay: 'drop',
+  promptCaching: 'automatic',
   streaming: false,
 }
 
@@ -305,6 +312,7 @@ const openAIResponsesDefaultCapability: ProviderCapability = {
   toolCalls: true,
   thinking: 'native',
   thinkingReplay: 'verify-replay',
+  promptCaching: 'automatic',
   streaming: true,
 }
 

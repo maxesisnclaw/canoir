@@ -100,4 +100,7 @@ export interface Usage {
   totalInputTokens: number
   outputTokens: number
   reliable: boolean
+  cacheReadTokens?: number
+  cacheCreationTokens?: number
+  reasoningTokens?: number
 }

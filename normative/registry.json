@@ -77,6 +77,22 @@
       ]
     },
     {
+      "id": "canoir-prompt-cache-degradation",
+      "basis": "canoir",
+      "rationale": "Cache hint 不改变消息语义；automatic 或 none 端点可忽略显式锚点，但必须记录降级。",
+      "schema": "openai-chat",
+      "cases": ["cache-503-openai-automatic-ignore.json"]
+    },
+    {
+      "id": "canoir-prompt-cache-validation",
+      "basis": "canoir",
+      "rationale": "Cache hint 是请求期优化策略；非法锚点与超过 breakpoint 上限必须在编码前 fail-loud。",
+      "cases": [
+        "cache-504-anthropic-anchor-out-of-range.json",
+        "cache-505-anthropic-breakpoint-limit.json"
+      ]
+    },
+    {
       "id": "canoir-capability-fail-loud",
       "basis": "canoir",
       "rationale": "无法满足 capability 时必须在编码前 fail-loud。",
@@ -112,6 +128,8 @@
       "anchor": "MessageCreateParams, MessageParam, ContentBlockParam, ThinkingConfigParam",
       "schema": "anthropic",
       "cases": [
+        "cache-501-anthropic-static-history.json",
+        "cache-502-anthropic-message-boundary.json",
         "structure-101-anthropic-merge-users.json",
         "structure-102-anthropic-tool-result-image.json",
         "thinking-101-anthropic-interleaved-replay.json",

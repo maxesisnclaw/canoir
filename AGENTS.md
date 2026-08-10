@@ -6,7 +6,7 @@
 
 实现本项目的 agent 有三种已被预判的失败模式，对应三条硬规则：
 
-**R1 禁止子步骤蔓延。** §8 的 M0–M6 是唯一合法计划，顺序即依赖序。如果你在 M3 发现地基没打牢，**停下来修地基**——回改 M0–M2 的产物（通常是 SPEC.md 或类型定义），然后继续 M3。禁止创建 3.1/3.2 式子任务来绕过地基问题。发现 spec 缺陷的正确动作是改 spec，不是在代码里加变通层。
+**R1 禁止子步骤蔓延。** §8 的 M0–M7 是唯一合法计划，顺序即依赖序。如果你在 M3 发现地基没打牢，**停下来修地基**——回改 M0–M2 的产物（通常是 SPEC.md 或类型定义），然后继续 M3。禁止创建 3.1/3.2 式子任务来绕过地基问题。发现 spec 缺陷的正确动作是改 spec，不是在代码里加变通层。
 
 **R2 关键承载点不可偷工。** §4 每条不变量附有验收标准（具体测试形态）。里程碑完成判定的第一项就是逐条核对承载点验收——缺一项，该里程碑不算完成，无论代码看起来多完整。
 
@@ -69,7 +69,7 @@ canoir/
 | `refusal` | `{category?, explanation?}` | stop_reason=refusal 的结构化形态 |
 | `provider_blocks` | 同 provider verbatim 回放的原生 block | 跨 provider 必须丢弃 |
 
-**usage 归一化**：`{totalInputTokens, outputTokens}`。各 codec 自己算对（Anthropic =input+cache_read+cache_creation 三项相加；OpenAI 单次值不叠加）。不可靠的 usage（全 0 占位）必须标记为不可靠，不得以 0 值污染上层。
+**usage 归一化**：`{totalInputTokens, outputTokens, cacheReadTokens?, cacheCreationTokens?, reasoningTokens?}`。各 codec 自己算对（Anthropic total=input+cache_read+cache_creation；OpenAI cached 是 input 子集，不重复相加）。原生分解字段缺失时保持缺省，不填 0；CanoIR 只表达 token，不计算价格。
 
 ## 4. 消息序列不变量（关键承载点 + 验收标准）
 
@@ -137,6 +137,7 @@ interface ProviderCapability {
   toolCalls: boolean
   thinking: 'native' | 'disabled-param' | 'unsupported'
   thinkingReplay: 'verify-replay' | 'replay' | 'drop'
+  promptCaching: 'explicit-markers' | 'automatic' | 'none'
   streaming: boolean
   hostedTools?: string[]  // 该端点支持的 server-side tool 类型
 }
@@ -151,13 +152,15 @@ interface ProviderCapability {
 - `thinkingReplay: 'verify-replay'` → 仅回放带非空 opaque provenance token 的 thinking
 - `thinkingReplay: 'replay'` → 原样回放 thinking，空 token 也合法
 - `thinkingReplay: 'drop'` → 丢弃历史 thinking；未知端点默认该档
+- `promptCaching: 'explicit-markers'` → encode 期 cache hint 可翻译为目标 API 的 block 级 breakpoint
+- `promptCaching: 'automatic' | 'none'` → 忽略显式 hint 并记录；这是唯一允许静默降级的 capability 类别，因为只影响性能和计费，不改变请求语义
 - capability 声明缺失的字段 → 按最保守值处理（fail-closed）
 - capability 进入 codec constructor，在 codec 生命周期内固定；只有 `updateCapability()` 可显式整体替换，禁止任何 per-call override
 
 ## 7. Conformance 语料
 
 - **纯数据**：一个 case 一个 JSON 文件，零代码。格式：输入（IR 消息序列或录制的 SSE 事件流）+ capability → 期望输出（编码结果 / 解码结果 / 校验错误 / 降级决策）
-- **命名**：`<类别>-<序号>-<短语>.json`，类别沿用 §5 的分类（structure/stream/toolcall/thinking/usage/compat/refusal/empty/degrade）
+- **命名**：`<类别>-<序号>-<短语>.json`，类别沿用 §5 的分类（structure/stream/toolcall/thinking/usage/cache/compat/refusal/empty/degrade）
 - **种子来源**（M2 起逐类转化）：protocol-survey.md 的 Part B 清单 + 宿主项目 `*.test.ts` 里的编码断言 + 生产日志锚点（lone surrogate 500、GLM usage 0/0、max_tokens 截断、refusal 记录——把真实错误响应录制成 fixture）
 - **去标识纪律**：语料中禁止出现内部域名、IP、路径、账号、内部 provider 命名。统一用 `endpoint-a`/`provider-x` 式通用名。这是公开发布的红线（§9 hook 会拦，但第一责任人是写语料的你）
 - **依据登记**：每个 corpus 文件必须且只能在 `normative/registry.json` 中登记一次。`official` 规则引用固定 source 与 anchor；`deviation` 规则必须写明 condition、testedAt 与 evidence；`canoir` 规则必须写明 rationale。禁止新增未登记语料或用默认规则隐式继承依据
@@ -205,6 +208,14 @@ interface ProviderCapability {
 - CI 使用 lockfile 安装依赖并运行完整 `bun run check`
 - SPEC 按 vendor 分开写官方规范与实测偏差，明确未登记的规范冲突一律视为 bug
 - DoD：registry 全覆盖且无重复；全部适用 encode body 通过官方类型校验；每条偏差具备 condition、testedAt、evidence；完整检查与公开扫描通过
+
+**M7 — 缓存计量分解与 encode 期 hint**
+- IR `Usage` 增加可选 cache read、cache creation 与 reasoning token 分解；三家 codec 各自映射原生 usage，缺失字段不填 0
+- `totalInputTokens` 继续表达上下文水位；OpenAI cached tokens 不重复计入；价格与金额永不进入 CanoIR
+- capability 增加 `promptCaching` 三档；cache anchor 只存在于 encode options，不进入 IR block
+- Anthropic 把 system/tools/history/message 锚点翻译为 block 级 `cache_control`；无 hint 不隐式添加 marker，实际 breakpoint 超过 4 时 fail-loud
+- automatic/none 端点忽略合法 hint 并记录，这是唯一允许静默降级的 capability 类别
+- DoD：usage 分解每 codec 至少一条语料；cache marker、合并后 message 边界、automatic 忽略、越界与 breakpoint 上限语料全绿；官方 schema、完整检查与公开扫描通过
 
 ## 9. Pre-push hook（公开发布防线）
 

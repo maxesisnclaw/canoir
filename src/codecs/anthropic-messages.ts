@@ -17,8 +17,10 @@ import {
   applyCapability,
   CapabilityError,
   normalizeCapability,
+  resolvePromptCacheAnchors,
   type CapabilityTransformOptions,
   type DegradationRecord,
+  type PromptCacheAnchor,
   type ProviderCapability,
 } from '../capability'
 import { cleanWireModelId } from '../model'
@@ -81,7 +83,6 @@ export interface AnthropicRequestBody {
   system?: string | JsonValue[]
   tools?: JsonValue[]
   thinking?: JsonValue
-  cache_control?: JsonValue
 }
 
 export interface AnthropicEncodedRequest {
@@ -288,6 +289,24 @@ function numberField(value: unknown, key: string): number {
     : 0
 }
 
+function optionalNumberField(value: unknown, key: string): number | undefined {
+  if (!isRecord(value)) return undefined
+  const field = value[key]
+  return typeof field === 'number' && Number.isInteger(field) && field >= 0
+    ? field
+    : undefined
+}
+
+function optionalNestedNumberField(
+  value: unknown,
+  objectKey: string,
+  numberKey: string,
+): number | undefined {
+  return isRecord(value)
+    ? optionalNumberField(value[objectKey], numberKey)
+    : undefined
+}
+
 function usageSources(value: unknown): unknown[] {
   if (!isRecord(value)) return []
   return Array.isArray(value.iterations) ? value.iterations : [value]
@@ -302,23 +321,77 @@ export function normalizeAnthropicUsage(
   let output = 0
   let cacheCreation = 0
   let cacheRead = 0
+  let reasoning = 0
+  let hasCacheCreation = false
+  let hasCacheRead = false
+  let hasReasoning = false
 
   for (const source of sources) {
     input += numberField(source, 'input_tokens')
     output += numberField(source, 'output_tokens')
-    cacheCreation += numberField(source, 'cache_creation_input_tokens')
-    cacheRead += numberField(source, 'cache_read_input_tokens')
+    const sourceCreation = optionalNumberField(
+      source,
+      'cache_creation_input_tokens',
+    )
+    const sourceRead = optionalNumberField(source, 'cache_read_input_tokens')
+    const sourceReasoning =
+      optionalNestedNumberField(
+        source,
+        'output_tokens_details',
+        'thinking_tokens',
+      ) ??
+      optionalNestedNumberField(
+        source,
+        'output_tokens_details',
+        'reasoning_tokens',
+      )
+    if (sourceCreation !== undefined) {
+      cacheCreation += sourceCreation
+      hasCacheCreation = true
+    }
+    if (sourceRead !== undefined) {
+      cacheRead += sourceRead
+      hasCacheRead = true
+    }
+    if (sourceReasoning !== undefined) {
+      reasoning += sourceReasoning
+      hasReasoning = true
+    }
   }
 
   if (sources.length <= 1 && deltaUsage !== undefined) {
     const deltaInput = numberField(deltaUsage, 'input_tokens')
     const deltaOutput = numberField(deltaUsage, 'output_tokens')
-    const deltaCreation = numberField(deltaUsage, 'cache_creation_input_tokens')
-    const deltaRead = numberField(deltaUsage, 'cache_read_input_tokens')
+    const deltaCreation = optionalNumberField(
+      deltaUsage,
+      'cache_creation_input_tokens',
+    )
+    const deltaRead = optionalNumberField(deltaUsage, 'cache_read_input_tokens')
+    const deltaReasoning =
+      optionalNestedNumberField(
+        deltaUsage,
+        'output_tokens_details',
+        'thinking_tokens',
+      ) ??
+      optionalNestedNumberField(
+        deltaUsage,
+        'output_tokens_details',
+        'reasoning_tokens',
+      )
     if (deltaInput > 0) input = deltaInput
     if (deltaOutput > 0) output = deltaOutput
-    if (deltaCreation > 0) cacheCreation = deltaCreation
-    if (deltaRead > 0) cacheRead = deltaRead
+    if (deltaCreation !== undefined) {
+      cacheCreation = deltaCreation
+      hasCacheCreation = true
+    }
+    if (deltaRead !== undefined) {
+      cacheRead = deltaRead
+      hasCacheRead = true
+    }
+    if (deltaReasoning !== undefined) {
+      reasoning = deltaReasoning
+      hasReasoning = true
+    }
   }
 
   const totalInputTokens = input + cacheCreation + cacheRead
@@ -326,6 +399,9 @@ export function normalizeAnthropicUsage(
     totalInputTokens,
     outputTokens: output,
     reliable: totalInputTokens > 0 || output > 0,
+    ...(hasCacheRead ? { cacheReadTokens: cacheRead } : {}),
+    ...(hasCacheCreation ? { cacheCreationTokens: cacheCreation } : {}),
+    ...(hasReasoning ? { reasoningTokens: reasoning } : {}),
   }
 }
 
@@ -600,16 +676,83 @@ function buildHeaders(config: AnthropicCodecConfig): Record<string, string> {
   )
 }
 
-function addDefaultCacheControls(body: AnthropicRequestBody): void {
-  body.cache_control = { type: 'ephemeral' }
-  if (typeof body.system === 'string' && body.system.length > 0) {
-    body.system = [
-      { type: 'text', text: body.system, cache_control: { type: 'ephemeral' } },
-    ]
+function cacheTarget(value: unknown, label: string): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new CapabilityError(
+      'prompt_cache_anchor_unavailable',
+      `${label} 没有可标记的 wire block`,
+    )
   }
-  const lastTool = body.tools?.at(-1)
-  if (lastTool !== undefined && isRecord(lastTool)) {
-    lastTool.cache_control = { type: 'ephemeral' }
+  return value
+}
+
+function applyAnthropicPromptCache(
+  body: AnthropicRequestBody,
+  encodedByMessage: readonly (AnthropicWireMessage | undefined)[],
+  requestMessages: readonly AnthropicWireMessage[],
+  anchors: readonly PromptCacheAnchor[],
+): void {
+  if (anchors.length === 0) return
+  const targets = new Set<Record<string, unknown>>()
+
+  for (const anchor of anchors) {
+    switch (anchor.kind) {
+      case 'system': {
+        if (typeof body.system === 'string') {
+          if (body.system.length === 0) {
+            throw new CapabilityError(
+              'prompt_cache_anchor_unavailable',
+              'system cache anchor 需要非空 system 内容',
+            )
+          }
+          const block: Record<string, JsonValue> = {
+            type: 'text',
+            text: body.system,
+          }
+          body.system = [block]
+          targets.add(block)
+        } else {
+          targets.add(cacheTarget(body.system?.at(-1), 'system cache anchor'))
+        }
+        break
+      }
+      case 'tools':
+        targets.add(cacheTarget(body.tools?.at(-1), 'tools cache anchor'))
+        break
+      case 'history': {
+        const message = requestMessages.at(-1)
+        targets.add(
+          cacheTarget(message?.content.at(-1), 'history cache anchor'),
+        )
+        break
+      }
+      case 'message': {
+        if (anchor.nthFromEnd > encodedByMessage.length) {
+          throw new CapabilityError(
+            'prompt_cache_anchor_out_of_range',
+            `message cache anchor 越界: nthFromEnd=${anchor.nthFromEnd}`,
+          )
+        }
+        const message = encodedByMessage.at(-anchor.nthFromEnd)
+        targets.add(
+          cacheTarget(
+            message?.content.at(-1),
+            `message cache anchor nthFromEnd=${anchor.nthFromEnd}`,
+          ),
+        )
+        break
+      }
+    }
+  }
+
+  if (targets.size > 4) {
+    throw new CapabilityError(
+      'prompt_cache_breakpoint_limit',
+      `Anthropic prompt cache breakpoint 超过上限 4: ${targets.size}`,
+    )
+  }
+  for (const target of targets) {
+    target.cache_control = { type: 'ephemeral' }
   }
 }
 
@@ -630,16 +773,17 @@ export function encodeAnthropicRequest(
 
   const capability = normalizeCapability(config.capability)
   const transformed = applyCapability(messages, capability, options)
-  const encoded = transformed.messages
-    .map((message) =>
-      encodeMessage(
-        message,
-        config.providerId,
-        capability.thinkingReplay,
-        transformed.degradations,
-      ),
-    )
-    .filter((message): message is AnthropicWireMessage => message !== undefined)
+  const encodedByMessage = transformed.messages.map((message) =>
+    encodeMessage(
+      message,
+      config.providerId,
+      capability.thinkingReplay,
+      transformed.degradations,
+    ),
+  )
+  const encoded = encodedByMessage.filter(
+    (message): message is AnthropicWireMessage => message !== undefined,
+  )
   const requestMessages = mergeAdjacentMessages(encoded)
 
   if (requestMessages.length === 0 || requestMessages[0]?.role !== 'user') {
@@ -693,7 +837,17 @@ export function encodeAnthropicRequest(
     }
   }
 
-  if (config.compatMode !== 'minimal') addDefaultCacheControls(body)
+  const promptCacheAnchors = resolvePromptCacheAnchors(
+    options.promptCache,
+    capability,
+    transformed.degradations,
+  )
+  applyAnthropicPromptCache(
+    body,
+    encodedByMessage,
+    requestMessages,
+    promptCacheAnchors,
+  )
 
   return {
     url: normalizeEndpoint(config.endpoint),

@@ -68,6 +68,31 @@ describe('conformance runner', () => {
     }
   })
 
+  test('M7 三家 Usage 分解与 cache hint 路径达到最低线', () => {
+    const usageCases = cases.filter((item) => item.category === 'usage')
+    expect(
+      usageCases.some((item) => item.operation.startsWith('anthropic-')),
+    ).toBe(true)
+    expect(
+      usageCases.some((item) => item.operation.startsWith('openai-chat-')),
+    ).toBe(true)
+    expect(
+      cases.some(
+        (item) =>
+          item.operation.startsWith('responses-') &&
+          JSON.stringify(item.expected).includes('cacheReadTokens'),
+      ),
+    ).toBe(true)
+
+    const cacheCases = cases.filter((item) => item.category === 'cache')
+    expect(cacheCases.length).toBeGreaterThanOrEqual(3)
+    expect(
+      cacheCases.some((item) =>
+        JSON.stringify(item.expected).includes('cache-hint-ignored'),
+      ),
+    ).toBe(true)
+  })
+
   for (const item of cases) {
     test(item.name, async () => {
       const result = await runConformanceCase(item)

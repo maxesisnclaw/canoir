@@ -33,7 +33,12 @@
       "name": "ResponseDegradationError",
       "code": "empty_response",
       "stopReason": "completed",
-      "usage": { "totalInputTokens": 21, "outputTokens": 67, "reliable": true }
+      "usage": {
+        "totalInputTokens": 21,
+        "outputTokens": 67,
+        "reliable": true,
+        "reasoningTokens": 61
+      }
     }
   }
 }

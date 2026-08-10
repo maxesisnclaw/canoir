@@ -15,13 +15,20 @@
       "usage": {
         "prompt_tokens": 100,
         "completion_tokens": 10,
-        "prompt_tokens_details": { "cached_tokens": 70 }
+        "prompt_tokens_details": { "cached_tokens": 70 },
+        "completion_tokens_details": { "reasoning_tokens": 6 }
       }
     }
   },
   "expected": {
     "message": { "role": "assistant", "content": [{ "type": "text", "text": "done" }] },
-    "usage": { "totalInputTokens": 100, "outputTokens": 10, "reliable": true },
+    "usage": {
+      "totalInputTokens": 100,
+      "outputTokens": 10,
+      "reliable": true,
+      "cacheReadTokens": 70,
+      "reasoningTokens": 6
+    },
     "stopReason": "stop",
     "notices": []
   }

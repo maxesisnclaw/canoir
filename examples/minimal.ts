@@ -11,6 +11,7 @@ const codec = new OpenAIResponsesCodec({
     toolCalls: true,
     thinking: 'native',
     thinkingReplay: 'verify-replay',
+    promptCaching: 'automatic',
     streaming: true,
   },
 })
