@@ -1,5 +1,6 @@
 # 本机私有指引，永不入库
 AGENTS.local.md
+.public-scan.local
 
 # 通用
 node_modules/

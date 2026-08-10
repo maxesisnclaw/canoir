@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+revisions=""
+remote_name=$1
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$local_sha" in
+    0000000000000000000000000000000000000000) continue ;;
+  esac
+
+  case "$remote_sha" in
+    0000000000000000000000000000000000000000)
+      pushed_revisions=$(git rev-list "$local_sha" --not --remotes="$remote_name")
+      ;;
+    *)
+      pushed_revisions=$(git rev-list "$remote_sha..$local_sha")
+      ;;
+  esac
+
+  revisions="$revisions $pushed_revisions"
+done
+
+if [ -z "$revisions" ]; then
+  exit 0
+fi
+
+bun run scripts/check-public-content.ts $revisions
