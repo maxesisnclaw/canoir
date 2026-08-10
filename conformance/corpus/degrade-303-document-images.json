@@ -1,0 +1,54 @@
+{
+  "name": "I7 PDF document 按版式优先降级为图片",
+  "category": "degrade",
+  "operation": "openai-chat-encode",
+  "recorded": false,
+  "input": {
+    "includeEnvelope": true,
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "capability": {
+      "vision": true,
+      "document": "degrade",
+      "toolCalls": true,
+      "thinking": "unsupported",
+      "streaming": false
+    },
+    "options": { "preferDocumentImages": true },
+    "documentConversion": {
+      "images": [
+        { "type": "image", "source": { "type": "base64", "mediaType": "image/png", "data": "cGFnZQ==" } }
+      ]
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "document", "source": { "type": "base64", "mediaType": "application/pdf", "data": "JVBERi0xLjQKJUVPRgo=" } }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "body": {
+      "model": "model-a",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            { "type": "image_url", "image_url": { "url": "data:image/png;base64,cGFnZQ==" } }
+          ]
+        }
+      ],
+      "stream": false
+    },
+    "notices": [],
+    "degradations": [
+      { "blockType": "document", "action": "document-to-images", "reason": "目标 provider 不原生支持 document，按版式优先转换为图片" }
+    ]
+  }
+}

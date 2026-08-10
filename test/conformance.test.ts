@@ -27,6 +27,17 @@ describe('conformance runner', () => {
     expect(openAIChatCases.length).toBeGreaterThanOrEqual(8)
   })
 
+  test('M4 Responses 与 capability 降级语料覆盖最低线', () => {
+    const responsesCases = cases.filter((item) =>
+      item.operation.startsWith('responses-'),
+    )
+    const degradationCases = cases.filter(
+      (item) => item.category === 'degrade',
+    )
+    expect(responsesCases.length).toBeGreaterThanOrEqual(7)
+    expect(degradationCases.length).toBeGreaterThanOrEqual(4)
+  })
+
   for (const item of cases) {
     test(item.name, async () => {
       const result = await runConformanceCase(item)

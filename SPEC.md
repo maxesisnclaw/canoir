@@ -156,6 +156,8 @@ interface ProviderBlocksBlock {
 
 该 block 用于同 provider verbatim 回放原生 output item 或 block，必须保留原始顺序。`providerId` 必须非空；跨 provider 编码时整块丢弃。
 
+OpenAI Responses 的 reasoning item 必须作为一个完整原生 item 保存并回放，不能只提取 summary。实测返回字段包含 `type`、`id`、`summary`、`content` 与 `encrypted_content`；仅把该 item 原样放入下一轮 `input`，再追加新的 user item，端点即可继续使用上一轮推理结果。Codec 请求必须包含 `include: ['reasoning.encrypted_content']`，且不得改写、截断或跨 provider 发送该密文。
+
 ### 2.3 Usage
 
 ```ts

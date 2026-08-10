@@ -1,0 +1,48 @@
+{
+  "name": "Responses SSE 组装 reasoning 并保留 encrypted output",
+  "category": "stream",
+  "operation": "responses-decode-stream",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "events": [
+      { "type": "response.reasoning_summary_text.delta", "item_id": "rs-a", "output_index": 0, "delta": "checking " },
+      { "type": "response.reasoning_summary_text.delta", "item_id": "rs-a", "output_index": 0, "delta": "plan" },
+      { "type": "response.output_text.done", "item_id": "msg-a", "output_index": 1, "content_index": 0, "text": "done" },
+      {
+        "type": "response.completed",
+        "response": {
+          "usage": { "input_tokens": 12, "output_tokens": 5 },
+          "output": [
+            { "id": "rs-a", "type": "reasoning", "encrypted_content": "enc-a", "summary": [{ "type": "summary_text", "text": "checking plan" }] },
+            { "id": "msg-a", "type": "message", "role": "assistant", "content": [{ "type": "output_text", "text": "done" }] }
+          ]
+        }
+      }
+    ]
+  },
+  "expected": {
+    "message": {
+      "role": "assistant",
+      "content": [
+        { "type": "thinking", "thinking": "checking plan", "signature": "openai-responses:rs-a", "providerId": "provider-x" },
+        { "type": "text", "text": "done" },
+        {
+          "type": "provider_blocks",
+          "providerId": "provider-x",
+          "blocks": [
+            { "id": "rs-a", "type": "reasoning", "encrypted_content": "enc-a", "summary": [{ "type": "summary_text", "text": "checking plan" }] },
+            { "id": "msg-a", "type": "message", "role": "assistant", "content": [{ "type": "output_text", "text": "done" }] }
+          ]
+        }
+      ]
+    },
+    "usage": { "totalInputTokens": 12, "outputTokens": 5, "reliable": true },
+    "stopReason": "completed"
+  }
+}

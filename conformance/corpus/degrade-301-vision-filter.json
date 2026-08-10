@@ -1,0 +1,42 @@
+{
+  "name": "I7 vision false 在请求侧过滤图片并记录",
+  "category": "degrade",
+  "operation": "openai-chat-encode",
+  "recorded": false,
+  "input": {
+    "includeEnvelope": true,
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "capability": {
+      "vision": false,
+      "document": "unsupported",
+      "toolCalls": true,
+      "thinking": "unsupported",
+      "streaming": false
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "text", "text": "caption" },
+          { "type": "image", "source": { "type": "base64", "mediaType": "image/png", "data": "aW1n" } }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "body": {
+      "model": "model-a",
+      "messages": [{ "role": "user", "content": "caption" }],
+      "stream": false
+    },
+    "notices": [],
+    "degradations": [
+      { "blockType": "image", "action": "filtered", "reason": "目标 provider 的 vision capability 为 false" }
+    ]
+  }
+}

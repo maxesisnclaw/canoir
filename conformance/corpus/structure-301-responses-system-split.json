@@ -1,0 +1,29 @@
+{
+  "name": "Responses split mode 分离 instructions 与 developer context",
+  "category": "structure",
+  "operation": "responses-encode",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "options": { "instructions": "identity", "system": "runtime context" },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "hello" }] }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "store": false,
+    "stream": true,
+    "input": [
+      { "role": "developer", "content": "runtime context" },
+      { "role": "user", "content": [{ "type": "input_text", "text": "hello" }] }
+    ],
+    "include": ["reasoning.encrypted_content"],
+    "instructions": "identity"
+  }
+}

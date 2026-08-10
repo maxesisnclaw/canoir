@@ -1,0 +1,46 @@
+{
+  "name": "Responses SSE 按 output 位置组装正文并读取 usage",
+  "category": "stream",
+  "operation": "responses-decode-stream",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "events": [
+      { "type": "response.output_text.delta", "item_id": "msg-b", "output_index": 1, "content_index": 0, "delta": "world" },
+      { "type": "response.output_text.done", "item_id": "msg-a", "output_index": 0, "content_index": 0, "text": "hello " },
+      {
+        "type": "response.completed",
+        "response": {
+          "usage": { "input_tokens": 10, "output_tokens": 3, "input_tokens_details": { "cached_tokens": 4 } },
+          "output": [
+            { "id": "msg-a", "type": "message", "role": "assistant", "content": [{ "type": "output_text", "text": "hello " }] },
+            { "id": "msg-b", "type": "message", "role": "assistant", "content": [{ "type": "output_text", "text": "world" }] }
+          ]
+        }
+      }
+    ]
+  },
+  "expected": {
+    "message": {
+      "role": "assistant",
+      "content": [
+        { "type": "text", "text": "hello world" },
+        {
+          "type": "provider_blocks",
+          "providerId": "provider-x",
+          "blocks": [
+            { "id": "msg-a", "type": "message", "role": "assistant", "content": [{ "type": "output_text", "text": "hello " }] },
+            { "id": "msg-b", "type": "message", "role": "assistant", "content": [{ "type": "output_text", "text": "world" }] }
+          ]
+        }
+      ]
+    },
+    "usage": { "totalInputTokens": 10, "outputTokens": 3, "reliable": true },
+    "stopReason": "completed"
+  }
+}

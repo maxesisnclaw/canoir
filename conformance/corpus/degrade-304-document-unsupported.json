@@ -1,0 +1,30 @@
+{
+  "name": "I7 document unsupported 时 fail loud",
+  "category": "degrade",
+  "operation": "openai-chat-encode",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "capability": {
+      "vision": false,
+      "document": "unsupported",
+      "toolCalls": true,
+      "thinking": "unsupported",
+      "streaming": false
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "document", "source": { "type": "url", "url": "https://files.example/document.pdf" } }
+        ]
+      }
+    ]
+  },
+  "expected": { "error": { "name": "CapabilityError", "code": "document_unsupported" } }
+}

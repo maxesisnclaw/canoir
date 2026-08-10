@@ -1,0 +1,28 @@
+{
+  "name": "Responses single mode 把 system 放入 input",
+  "category": "structure",
+  "operation": "responses-encode",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "options": { "system": "full system" },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "hello" }] }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "store": false,
+    "stream": true,
+    "input": [
+      { "role": "system", "content": "full system" },
+      { "role": "user", "content": [{ "type": "input_text", "text": "hello" }] }
+    ],
+    "include": ["reasoning.encrypted_content"]
+  }
+}

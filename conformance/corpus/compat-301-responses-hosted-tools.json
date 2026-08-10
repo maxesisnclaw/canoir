@@ -1,0 +1,53 @@
+{
+  "name": "Responses hosted tools 由 capability 注入且排在本地工具前",
+  "category": "compat",
+  "operation": "responses-encode",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "capability": {
+      "vision": true,
+      "document": "native",
+      "toolCalls": true,
+      "thinking": "native",
+      "streaming": true,
+      "hostedTools": ["web_search", "web_search"]
+    },
+    "options": {
+      "tools": [
+        {
+          "name": "lookup",
+          "description": "lookup locally",
+          "parameters": { "type": "object", "properties": {} }
+        }
+      ]
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "search" }] }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "store": false,
+    "stream": true,
+    "input": [
+      { "role": "user", "content": [{ "type": "input_text", "text": "search" }] }
+    ],
+    "include": ["reasoning.encrypted_content"],
+    "tools": [
+      { "type": "web_search" },
+      {
+        "type": "function",
+        "name": "lookup",
+        "description": "lookup locally",
+        "parameters": { "type": "object", "properties": {} }
+      }
+    ],
+    "tool_choice": "auto"
+  }
+}

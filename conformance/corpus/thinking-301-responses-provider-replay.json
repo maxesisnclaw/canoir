@@ -1,0 +1,59 @@
+{
+  "name": "Responses 同 provider 原样回放 encrypted content 与 thought signature",
+  "category": "thinking",
+  "operation": "responses-encode",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "start" }] },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "provider_blocks",
+            "providerId": "provider-x",
+            "blocks": [
+              { "id": "rs-a", "type": "reasoning", "encrypted_content": "enc-a", "summary": [] },
+              {
+                "type": "function_call",
+                "call_id": "call-a",
+                "name": "lookup",
+                "arguments": "{}",
+                "thought_signature": "sig-a"
+              }
+            ]
+          },
+          { "type": "tool_call", "id": "call-a", "name": "lookup", "arguments": {} }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [{ "type": "tool_result", "toolCallId": "call-a", "content": "done" }]
+      }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "store": false,
+    "stream": true,
+    "input": [
+      { "role": "user", "content": [{ "type": "input_text", "text": "start" }] },
+      { "id": "rs-a", "type": "reasoning", "encrypted_content": "enc-a", "summary": [] },
+      {
+        "type": "function_call",
+        "call_id": "call-a",
+        "name": "lookup",
+        "arguments": "{}",
+        "thought_signature": "sig-a"
+      },
+      { "type": "function_call_output", "call_id": "call-a", "output": "done" }
+    ],
+    "include": ["reasoning.encrypted_content"]
+  }
+}

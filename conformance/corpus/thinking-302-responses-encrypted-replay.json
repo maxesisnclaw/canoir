@@ -1,0 +1,61 @@
+{
+  "name": "Responses 同 provider 回放真实录制的 encrypted reasoning item",
+  "category": "thinking",
+  "operation": "responses-encode",
+  "recorded": true,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "provider_blocks",
+            "providerId": "provider-x",
+            "blocks": [
+              {
+                "type": "reasoning",
+                "id": "reasoning-a",
+                "summary": [
+                  { "type": "summary_text", "text": "已计算上一轮结果。" }
+                ],
+                "content": [],
+                "encrypted_content": "encrypted-reasoning-a"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [{ "type": "text", "text": "基于上一轮结果继续计算。" }]
+      }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "store": false,
+    "stream": true,
+    "input": [
+      {
+        "type": "reasoning",
+        "id": "reasoning-a",
+        "summary": [
+          { "type": "summary_text", "text": "已计算上一轮结果。" }
+        ],
+        "content": [],
+        "encrypted_content": "encrypted-reasoning-a"
+      },
+      {
+        "role": "user",
+        "content": [{ "type": "input_text", "text": "基于上一轮结果继续计算。" }]
+      }
+    ],
+    "include": ["reasoning.encrypted_content"]
+  }
+}

@@ -41,9 +41,16 @@ describe('AnthropicMessagesCodec transport', () => {
       compatMode: 'minimal',
       fetch: fetchImpl,
     })
-    const result = await codec.call([
-      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
-    ])
+    const result = await codec.call(
+      [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      {
+        vision: true,
+        document: 'unsupported',
+        toolCalls: true,
+        thinking: 'native',
+        streaming: true,
+      },
+    )
 
     expect(requestBody).toMatchObject({
       model: 'model-a',

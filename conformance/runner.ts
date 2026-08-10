@@ -20,6 +20,18 @@ import {
   type OpenAIChatEncodeOptions,
   type OpenAIChatRequestBody,
 } from '../src/codecs/openai-chat-completions'
+import {
+  CapabilityError,
+  type CapabilityTransformOptions,
+  type ProviderCapability,
+} from '../src/capability'
+import {
+  OpenAIResponsesCodec,
+  OpenAIResponsesProtocolError,
+  type OpenAIResponsesCodecConfig,
+  type OpenAIResponsesEncodeOptions,
+  type OpenAIResponsesSseEvent,
+} from '../src/codecs/openai-responses'
 import type { JsonObject, JsonValue, Message } from '../src/types'
 import {
   validateMessages,
@@ -158,6 +170,27 @@ function openAIChatCodecConfig(input: JsonObject): OpenAIChatCodecConfig {
   }
 }
 
+function openAIResponsesCodecConfig(
+  input: JsonObject,
+): OpenAIResponsesCodecConfig {
+  const value = input.config
+  if (!isRecord(value)) throw new Error('responses case 缺少 input.config')
+  if (
+    typeof value.providerId !== 'string' ||
+    typeof value.model !== 'string' ||
+    typeof value.endpoint !== 'string' ||
+    typeof value.apiKey !== 'string'
+  ) {
+    throw new Error('responses config 缺少 providerId/model/endpoint/apiKey')
+  }
+  return {
+    providerId: value.providerId,
+    model: value.model,
+    endpoint: value.endpoint,
+    apiKey: value.apiKey,
+  }
+}
+
 function messages(input: JsonObject): Message[] {
   if (!Array.isArray(input.messages)) {
     throw new Error('conformance case 缺少 input.messages')
@@ -172,9 +205,99 @@ function encodeOptions(input: JsonObject): AnthropicEncodeOptions {
 }
 
 function openAIChatEncodeOptions(input: JsonObject): OpenAIChatEncodeOptions {
-  return isRecord(input.options)
+  const options = isRecord(input.options)
     ? (input.options as OpenAIChatEncodeOptions)
     : {}
+  return { ...options, ...capabilityTransformOptions(input) }
+}
+
+function openAIResponsesEncodeOptions(
+  input: JsonObject,
+): OpenAIResponsesEncodeOptions {
+  const options = isRecord(input.options)
+    ? (input.options as OpenAIResponsesEncodeOptions)
+    : {}
+  return { ...options, ...capabilityTransformOptions(input) }
+}
+
+function capabilityTransformOptions(
+  input: JsonObject,
+): CapabilityTransformOptions {
+  const value = input.documentConversion
+  if (!isRecord(value)) return {}
+  const toText = typeof value.text === 'string' ? () => value.text as string : undefined
+  const images = Array.isArray(value.images)
+    ? (value.images as unknown as import('../src/types').ImageBlock[])
+    : undefined
+  return {
+    ...(toText === undefined ? {} : { documentConverters: { toText } }),
+    ...(images === undefined
+      ? {}
+      : {
+          documentConverters: {
+            ...(toText === undefined ? {} : { toText }),
+            toImages: () => images,
+          },
+        }),
+  }
+}
+
+function providerCapability(
+  input: JsonObject,
+  defaults: ProviderCapability,
+): ProviderCapability {
+  const value = input.capability
+  if (!isRecord(value)) return defaults
+  return {
+    vision: value.vision === true,
+    document:
+      value.document === 'native' || value.document === 'degrade'
+        ? value.document
+        : 'unsupported',
+    toolCalls: value.toolCalls === true,
+    thinking:
+      value.thinking === 'native' || value.thinking === 'disabled-param'
+        ? value.thinking
+        : 'unsupported',
+    streaming: value.streaming === true,
+    ...(Array.isArray(value.hostedTools) &&
+    value.hostedTools.every((item) => typeof item === 'string')
+      ? { hostedTools: value.hostedTools }
+      : {}),
+  }
+}
+
+const anthropicDefaultCapability: ProviderCapability = {
+  vision: true,
+  document: 'unsupported',
+  toolCalls: true,
+  thinking: 'native',
+  streaming: true,
+}
+
+const openAIChatDefaultCapability: ProviderCapability = {
+  vision: true,
+  document: 'unsupported',
+  toolCalls: true,
+  thinking: 'native',
+  streaming: false,
+}
+
+const openAIResponsesDefaultCapability: ProviderCapability = {
+  vision: true,
+  document: 'native',
+  toolCalls: true,
+  thinking: 'native',
+  streaming: true,
+}
+
+function responsesEvents(input: JsonObject): OpenAIResponsesSseEvent[] {
+  if (!Array.isArray(input.events)) {
+    throw new Error('responses stream case 缺少 input.events')
+  }
+  return input.events.map((data) => ({
+    data: data as JsonObject,
+  }))
 }
 
 function sseEvents(input: JsonObject): AnthropicSseEvent[] {
@@ -203,6 +326,12 @@ function normalizeError(error: unknown): JsonValue {
     return { error: { name: error.name, code: error.code } }
   }
   if (error instanceof OpenAIChatProtocolError) {
+    return { error: { name: error.name, code: error.code } }
+  }
+  if (error instanceof OpenAIResponsesProtocolError) {
+    return { error: { name: error.name, code: error.code } }
+  }
+  if (error instanceof CapabilityError) {
     return { error: { name: error.name, code: error.code } }
   }
   if (error instanceof Error) {
@@ -255,7 +384,11 @@ export async function runConformanceCase(
         break
       case 'anthropic-encode': {
         const codec = new AnthropicMessagesCodec(anthropicCodecConfig(item.input))
-        const request = codec.encode(messages(item.input), encodeOptions(item.input))
+        const request = codec.encode(
+          messages(item.input),
+          providerCapability(item.input, anthropicDefaultCapability),
+          encodeOptions(item.input),
+        )
         actual = item.input.includeHeaders === true
           ? toJsonValue(
               { body: request.body, headers: request.headers },
@@ -306,10 +439,18 @@ export async function runConformanceCase(
         )
         const request = codec.encode(
           messages(item.input),
+          providerCapability(item.input, openAIChatDefaultCapability),
           openAIChatEncodeOptions(item.input),
         )
         actual = item.input.includeEnvelope === true
-          ? toJsonValue(request, `${item.name}.actual`)
+          ? toJsonValue(
+              {
+                body: request.body,
+                notices: request.notices,
+                degradations: request.degradations,
+              },
+              `${item.name}.actual`,
+            )
           : toJsonValue(request.body, `${item.name}.actual`)
         break
       }
@@ -358,6 +499,33 @@ export async function runConformanceCase(
         actual = {
           containsEscapedLoneSurrogate: json.includes('\\ud800'),
         }
+        break
+      }
+      case 'responses-encode': {
+        const codec = new OpenAIResponsesCodec(
+          openAIResponsesCodecConfig(item.input),
+        )
+        const request = codec.encode(
+          messages(item.input),
+          providerCapability(item.input, openAIResponsesDefaultCapability),
+          openAIResponsesEncodeOptions(item.input),
+        )
+        actual = item.input.includeEnvelope === true
+          ? toJsonValue(
+              { body: request.body, degradations: request.degradations },
+              `${item.name}.actual`,
+            )
+          : toJsonValue(request.body, `${item.name}.actual`)
+        break
+      }
+      case 'responses-decode-stream': {
+        const codec = new OpenAIResponsesCodec(
+          openAIResponsesCodecConfig(item.input),
+        )
+        actual = toJsonValue(
+          codec.decodeStream(responsesEvents(item.input)),
+          `${item.name}.actual`,
+        )
         break
       }
       default:

@@ -1,0 +1,52 @@
+{
+  "name": "Responses function call output 支持图片 block 数组",
+  "category": "structure",
+  "operation": "responses-encode",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "inspect" }] },
+      {
+        "role": "assistant",
+        "content": [{ "type": "tool_call", "id": "call-a", "name": "inspect", "arguments": {} }]
+      },
+      {
+        "role": "tool",
+        "content": [
+          {
+            "type": "tool_result",
+            "toolCallId": "call-a",
+            "content": "result",
+            "images": [
+              { "type": "image", "source": { "type": "base64", "mediaType": "image/png", "data": "aW1n" } }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "store": false,
+    "stream": true,
+    "input": [
+      { "role": "user", "content": [{ "type": "input_text", "text": "inspect" }] },
+      { "type": "function_call", "call_id": "call-a", "name": "inspect", "arguments": "{}" },
+      {
+        "type": "function_call_output",
+        "call_id": "call-a",
+        "output": [
+          { "type": "input_text", "text": "result" },
+          { "type": "input_image", "image_url": "data:image/png;base64,aW1n" }
+        ]
+      }
+    ],
+    "include": ["reasoning.encrypted_content"]
+  }
+}

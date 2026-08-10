@@ -1,4 +1,12 @@
 import { cleanWireModelId } from '../model'
+import {
+  applyCapability,
+  CapabilityError,
+  normalizeCapability,
+  type CapabilityTransformOptions,
+  type DegradationRecord,
+  type ProviderCapability,
+} from '../capability'
 import type {
   AssistantBlock,
   AssistantMessage,
@@ -29,7 +37,7 @@ export interface OpenAIChatToolDefinition {
   parameters: JsonObject
 }
 
-export interface OpenAIChatEncodeOptions {
+export interface OpenAIChatEncodeOptions extends CapabilityTransformOptions {
   system?: string
   maxOutputTokens?: number
   tools?: OpenAIChatToolDefinition[]
@@ -70,6 +78,7 @@ export interface OpenAIChatEncodedRequest {
   headers: Record<string, string>
   body: OpenAIChatRequestBody
   notices: OpenAIChatNotice[]
+  degradations: DegradationRecord[]
 }
 
 export interface OpenAIChatDecodedResponse {
@@ -435,6 +444,7 @@ function encodeTools(
 export function encodeOpenAIChatRequest(
   config: OpenAIChatCodecConfig,
   messages: readonly Message[],
+  capabilityInput: Partial<ProviderCapability>,
   options: OpenAIChatEncodeOptions = {},
 ): OpenAIChatEncodedRequest {
   const validation = validateMessages(messages)
@@ -447,7 +457,9 @@ export function encodeOpenAIChatRequest(
     )
   }
 
-  const encoded = encodeMessages(messages)
+  const capability = normalizeCapability(capabilityInput)
+  const transformed = applyCapability(messages, capability, options)
+  const encoded = encodeMessages(transformed.messages)
   const requestMessages: OpenAIChatWireMessage[] = []
   if (options.system !== undefined) {
     requestMessages.push({ role: 'system', content: options.system })
@@ -470,13 +482,21 @@ export function encodeOpenAIChatRequest(
     body.max_tokens = options.maxOutputTokens
   }
   if (options.tools !== undefined && options.tools.length > 0) {
+    if (!capability.toolCalls) {
+      throw new CapabilityError(
+        'tool_calls_unsupported',
+        '目标 provider 不支持工具定义',
+      )
+    }
     body.tools = encodeTools(
       options.tools,
       config.toolSchemaDialect ?? 'json-schema',
     )
   }
   if (options.reasoningEffort !== undefined) {
-    if (model.startsWith('o1') || model.startsWith('o3')) {
+    if (capability.thinking === 'unsupported') {
+      // 不发送 provider 不支持的 thinking 控制参数。
+    } else if (model.startsWith('o1') || model.startsWith('o3')) {
       body.reasoning_effort = options.reasoningEffort
     } else {
       body.reasoning = { effort: options.reasoningEffort }
@@ -488,6 +508,7 @@ export function encodeOpenAIChatRequest(
     headers: buildHeaders(config),
     body,
     notices: encoded.notices,
+    degradations: transformed.degradations,
   }
 }
 
@@ -612,9 +633,10 @@ export class OpenAIChatCompletionsCodec {
 
   encode(
     messages: readonly Message[],
+    capability: Partial<ProviderCapability>,
     options: OpenAIChatEncodeOptions = {},
   ): OpenAIChatEncodedRequest {
-    return encodeOpenAIChatRequest(this.config, messages, options)
+    return encodeOpenAIChatRequest(this.config, messages, capability, options)
   }
 
   decode(response: unknown): OpenAIChatDecodedResponse {
@@ -623,9 +645,10 @@ export class OpenAIChatCompletionsCodec {
 
   async call(
     messages: readonly Message[],
+    capability: Partial<ProviderCapability>,
     options: OpenAIChatEncodeOptions = {},
   ): Promise<OpenAIChatDecodedResponse> {
-    const request = this.encode(messages, options)
+    const request = this.encode(messages, capability, options)
     const fetchImpl = this.config.fetch ?? globalThis.fetch
     const response = await fetchImpl(request.url, {
       method: 'POST',

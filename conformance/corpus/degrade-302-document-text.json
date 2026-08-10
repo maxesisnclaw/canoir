@@ -1,0 +1,42 @@
+{
+  "name": "I7 document 降级为纯文本并记录",
+  "category": "degrade",
+  "operation": "openai-chat-encode",
+  "recorded": false,
+  "input": {
+    "includeEnvelope": true,
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "capability": {
+      "vision": false,
+      "document": "degrade",
+      "toolCalls": true,
+      "thinking": "unsupported",
+      "streaming": false
+    },
+    "documentConversion": { "text": "extracted text" },
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "document", "source": { "type": "text", "mediaType": "text/plain", "text": "source" } }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "body": {
+      "model": "model-a",
+      "messages": [{ "role": "user", "content": "extracted text" }],
+      "stream": false
+    },
+    "notices": [],
+    "degradations": [
+      { "blockType": "document", "action": "document-to-text", "reason": "目标 provider 不原生支持 document，转换为纯文本" }
+    ]
+  }
+}

@@ -113,7 +113,7 @@ canoir/
 
 **OpenAI Responses**
 - 系统提示双模式：`instructions` 顶层字段 vs `input[0]{role:'developer'/'system'}`，代理兼容性优先（A6，`openai-responses.ts:837-857`；实测某些代理会覆盖顶层 `instructions`，`input[role:"system"]` 存活）
-- reasoning item 回放 + encrypted_content（🔬 待实测验证，验证结果写回语料）
+- reasoning item 回放必须保留同 provider 返回的完整原生 item，尤其是 `encrypted_content`；实测仅回放该 item 再追加 user 消息即可延续上一轮推理结果
 - function_call_output 支持 image block 数组
 - thought_signature 类非标准字段必须回传，不得丢弃（C5）
 

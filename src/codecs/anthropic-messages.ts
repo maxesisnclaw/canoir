@@ -13,6 +13,14 @@ import type {
   ToolResultBlock,
   Usage,
 } from '../types'
+import {
+  applyCapability,
+  CapabilityError,
+  normalizeCapability,
+  type CapabilityTransformOptions,
+  type DegradationRecord,
+  type ProviderCapability,
+} from '../capability'
 import { cleanWireModelId } from '../model'
 import { validateMessages } from '../validate'
 
@@ -39,7 +47,7 @@ export type AnthropicThinkingOption =
   | { type: 'off' }
   | { type: 'enabled'; budgetTokens: number }
 
-export interface AnthropicEncodeOptions {
+export interface AnthropicEncodeOptions extends CapabilityTransformOptions {
   maxOutputTokens?: number
   stream?: boolean
   system?: string
@@ -67,6 +75,7 @@ export interface AnthropicEncodedRequest {
   url: string
   headers: Record<string, string>
   body: AnthropicRequestBody
+  degradations: DegradationRecord[]
 }
 
 export interface AnthropicDecodedResponse {
@@ -318,11 +327,31 @@ function encodeImage(block: ImageBlock): JsonValue {
   }
 }
 
-function rejectDocument(_block: DocumentBlock): never {
-  throw new AnthropicProtocolError(
-    'document_capability_required',
-    'document 编码必须等待 capability 矩阵决定原生发送或显式降级',
-  )
+function encodeDocument(block: DocumentBlock): JsonValue {
+  switch (block.source.type) {
+    case 'base64':
+      return {
+        type: 'document',
+        source: {
+          type: 'base64',
+          media_type: block.source.mediaType,
+          data: block.source.data,
+        },
+      }
+    case 'url':
+      return {
+        type: 'document',
+        source: { type: 'url', url: block.source.url },
+      }
+    case 'text':
+      return {
+        type: 'document',
+        source: {
+          type: 'content',
+          content: [{ type: 'text', text: block.source.text }],
+        },
+      }
+  }
 }
 
 function encodeToolResult(block: ToolResultBlock): JsonValue {
@@ -396,7 +425,7 @@ function encodeMessage(
         content.push(encodeImage(block))
         break
       case 'document':
-        rejectDocument(block)
+        content.push(encodeDocument(block))
         break
       case 'thinking': {
         const encoded = encodeThinking(block, providerId)
@@ -510,6 +539,7 @@ function addDefaultCacheControls(body: AnthropicRequestBody): void {
 export function encodeAnthropicRequest(
   config: AnthropicCodecConfig,
   messages: readonly Message[],
+  capabilityInput: Partial<ProviderCapability>,
   options: AnthropicEncodeOptions = {},
 ): AnthropicEncodedRequest {
   const validation = validateMessages(messages)
@@ -522,7 +552,9 @@ export function encodeAnthropicRequest(
     )
   }
 
-  const encoded = messages
+  const capability = normalizeCapability(capabilityInput)
+  const transformed = applyCapability(messages, capability, options)
+  const encoded = transformed.messages
     .map((message) => encodeMessage(message, config.providerId))
     .filter((message): message is AnthropicWireMessage => message !== undefined)
   const requestMessages = mergeAdjacentMessages(encoded)
@@ -538,11 +570,17 @@ export function encodeAnthropicRequest(
     model: cleanWireModelId(config.model),
     max_tokens: options.maxOutputTokens ?? 32_000,
     messages: requestMessages,
-    stream: options.stream ?? true,
+    stream: options.stream ?? capability.streaming,
   }
 
   if (options.system !== undefined) body.system = options.system
   if (options.tools !== undefined && options.tools.length > 0) {
+    if (!capability.toolCalls) {
+      throw new CapabilityError(
+        'tool_calls_unsupported',
+        '目标 provider 不支持工具定义',
+      )
+    }
     body.tools = options.tools.map((tool) => ({
       name: tool.name,
       description: tool.description,
@@ -550,8 +588,16 @@ export function encodeAnthropicRequest(
     }))
   }
   if (options.thinking?.type === 'off') {
-    body.thinking = { type: 'disabled' }
+    if (capability.thinking !== 'unsupported') {
+      body.thinking = { type: 'disabled' }
+    }
   } else if (options.thinking?.type === 'enabled') {
+    if (capability.thinking !== 'native') {
+      throw new CapabilityError(
+        'thinking_unsupported',
+        '目标 provider 不支持启用 thinking',
+      )
+    }
     if (!Number.isInteger(options.thinking.budgetTokens) || options.thinking.budgetTokens <= 0) {
       throw new AnthropicProtocolError(
         'invalid_thinking_budget',
@@ -570,6 +616,7 @@ export function encodeAnthropicRequest(
     url: normalizeEndpoint(config.endpoint),
     headers: buildHeaders(config),
     body,
+    degradations: transformed.degradations,
   }
 }
 
@@ -994,9 +1041,10 @@ export class AnthropicMessagesCodec {
 
   encode(
     messages: readonly Message[],
+    capability: Partial<ProviderCapability>,
     options: AnthropicEncodeOptions = {},
   ): AnthropicEncodedRequest {
-    return encodeAnthropicRequest(this.config, messages, options)
+    return encodeAnthropicRequest(this.config, messages, capability, options)
   }
 
   decode(response: unknown): AnthropicDecodedResponse {
@@ -1009,9 +1057,10 @@ export class AnthropicMessagesCodec {
 
   async call(
     messages: readonly Message[],
+    capability: Partial<ProviderCapability>,
     options: AnthropicEncodeOptions = {},
   ): Promise<AnthropicDecodedResponse> {
-    const request = this.encode(messages, options)
+    const request = this.encode(messages, capability, options)
     const response = await this.fetchImpl(request.url, {
       method: 'POST',
       headers: request.headers,

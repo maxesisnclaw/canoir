@@ -1,0 +1,45 @@
+{
+  "name": "Responses document native capability 编码 input file",
+  "category": "structure",
+  "operation": "responses-encode",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "capability": {
+      "vision": true,
+      "document": "native",
+      "toolCalls": true,
+      "thinking": "native",
+      "streaming": true
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "text", "text": "read" },
+          { "type": "document", "source": { "type": "url", "url": "https://files.example/document.pdf" } }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "store": false,
+    "stream": true,
+    "input": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "input_text", "text": "read" },
+          { "type": "input_file", "file_url": "https://files.example/document.pdf" }
+        ]
+      }
+    ],
+    "include": ["reasoning.encrypted_content"]
+  }
+}
