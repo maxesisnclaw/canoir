@@ -36,6 +36,7 @@ export interface OpenAIResponsesCodecConfig {
   endpoint: string
   apiKey: string
   headers?: Record<string, string>
+  capability: Partial<ProviderCapability>
   fetch?: typeof globalThis.fetch
 }
 
@@ -269,6 +270,35 @@ function sameProviderRawBlocks(
   )
 }
 
+function filterReasoningReplay(
+  blocks: readonly JsonValue[],
+  replay: ProviderCapability['thinkingReplay'],
+  degradations: DegradationRecord[],
+): JsonValue[] {
+  let filtered = false
+  const kept = blocks.filter((block) => {
+    if (!isRecord(block) || block.type !== 'reasoning') return true
+    const keep =
+      replay === 'replay' ||
+      (replay === 'verify-replay' &&
+        typeof block.encrypted_content === 'string' &&
+        block.encrypted_content.length > 0)
+    if (!keep) filtered = true
+    return keep
+  })
+  if (filtered) {
+    degradations.push({
+      blockType: 'thinking',
+      action: 'filtered',
+      reason:
+        replay === 'drop'
+          ? '目标 provider 的 thinkingReplay capability 为 drop'
+          : '目标 provider 要求 provenance token，过滤无 encrypted_content 的 reasoning',
+    })
+  }
+  return kept
+}
+
 function encodeToolCall(block: ToolCallBlock): JsonValue {
   return {
     type: 'function_call',
@@ -281,6 +311,7 @@ function encodeToolCall(block: ToolCallBlock): JsonValue {
 function encodeInput(
   messages: readonly Message[],
   providerId: string,
+  replay: ProviderCapability['thinkingReplay'],
   degradations: DegradationRecord[],
 ): JsonValue[] {
   const input: JsonValue[] = []
@@ -323,7 +354,7 @@ function encodeInput(
 
     const raw = sameProviderRawBlocks(message.content, providerId)
     if (raw !== undefined) {
-      input.push(...raw.blocks)
+      input.push(...filterReasoningReplay(raw.blocks, replay, degradations))
       continue
     }
 
@@ -390,7 +421,6 @@ function encodeTools(
 export function encodeOpenAIResponsesRequest(
   config: OpenAIResponsesCodecConfig,
   messages: readonly Message[],
-  capabilityInput: Partial<ProviderCapability>,
   options: OpenAIResponsesEncodeOptions = {},
 ): OpenAIResponsesEncodedRequest {
   const validation = validateMessages(messages)
@@ -402,7 +432,7 @@ export function encodeOpenAIResponsesRequest(
         .join(', '),
     )
   }
-  const capability = normalizeCapability(capabilityInput)
+  const capability = normalizeCapability(config.capability)
   if (!capability.streaming) {
     throw new CapabilityError(
       'streaming_required',
@@ -411,7 +441,12 @@ export function encodeOpenAIResponsesRequest(
   }
   const transformed = applyCapability(messages, capability, options)
   const degradations = [...transformed.degradations]
-  const input = encodeInput(transformed.messages, config.providerId, degradations)
+  const input = encodeInput(
+    transformed.messages,
+    config.providerId,
+    capability.thinkingReplay,
+    degradations,
+  )
   if (options.instructions !== undefined) {
     if (options.system !== undefined) {
       input.unshift({ role: 'developer', content: options.system })
@@ -727,13 +762,28 @@ export function assembleOpenAIResponsesSse(
   }
 
   const content: AssistantBlock[] = []
+  const reasoningTokens = new Map<string, string>()
+  for (const item of completedOutput) {
+    if (
+      isRecord(item) &&
+      item.type === 'reasoning' &&
+      typeof item.id === 'string'
+    ) {
+      reasoningTokens.set(
+        item.id,
+        typeof item.encrypted_content === 'string'
+          ? item.encrypted_content
+          : '',
+      )
+    }
+  }
   const reasoning = [...reasoningParts.values()]
     .sort((left, right) => left.outputIndex - right.outputIndex)
   for (const part of reasoning) {
     content.push({
       type: 'thinking',
       thinking: part.text,
-      signature: `openai-responses:${part.itemId}`,
+      signature: reasoningTokens.get(part.itemId) ?? '',
       providerId,
     })
   }
@@ -749,9 +799,10 @@ export function assembleOpenAIResponsesSse(
       content.push({
         type: 'thinking',
         thinking: summary,
-        signature: `openai-responses:${
-          typeof item.id === 'string' ? item.id : 'reasoning'
-        }`,
+        signature:
+          typeof item.encrypted_content === 'string'
+            ? item.encrypted_content
+            : '',
         providerId,
       })
     }
@@ -822,21 +873,23 @@ export function stringifyOpenAIResponsesRequest(
 }
 
 export class OpenAIResponsesCodec {
-  private readonly config: OpenAIResponsesCodecConfig
+  private capability: ProviderCapability
 
-  constructor(config: OpenAIResponsesCodecConfig) {
-    this.config = config
+  constructor(private readonly config: OpenAIResponsesCodecConfig) {
+    this.capability = normalizeCapability(config.capability)
+  }
+
+  updateCapability(capability: Partial<ProviderCapability>): void {
+    this.capability = normalizeCapability(capability)
   }
 
   encode(
     messages: readonly Message[],
-    capability: Partial<ProviderCapability>,
     options: OpenAIResponsesEncodeOptions = {},
   ): OpenAIResponsesEncodedRequest {
     return encodeOpenAIResponsesRequest(
-      this.config,
+      { ...this.config, capability: this.capability },
       messages,
-      capability,
       options,
     )
   }
@@ -850,10 +903,9 @@ export class OpenAIResponsesCodec {
 
   async call(
     messages: readonly Message[],
-    capability: Partial<ProviderCapability>,
     options: OpenAIResponsesEncodeOptions = {},
   ): Promise<OpenAIResponsesDecodedResponse> {
-    const request = this.encode(messages, capability, options)
+    const request = this.encode(messages, options)
     await writeRequestDiagnostic(options.diagnosticWriter, {
       method: 'POST',
       url: request.url,

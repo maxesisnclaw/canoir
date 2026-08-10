@@ -73,7 +73,7 @@ interface ThinkingBlock {
 }
 ```
 
-`signature` 和 `providerId` 必须非空。Anthropic 使用 provider 返回的真实签名；OpenAI Responses 若没有等价签名，codec 使用稳定的 provider-local 伪签名。Thinking 是 provider-bound 数据，不可截断，不可跨 provider 回放。
+`signature` 是 provider 下发的 opaque provenance token：codec 只记录并在回放策略允许时原样携带，不解释、不校验、不伪造其内容。字段必须是字符串；provider 没有下发 token 时使用空字符串。`providerId` 必须非空。Thinking 是 provider-bound 数据，不可截断，不可跨 provider 回放。
 
 #### tool_call
 
@@ -185,14 +185,23 @@ interface ProviderCapability {
   document: 'native' | 'degrade' | 'unsupported'
   toolCalls: boolean
   thinking: 'native' | 'disabled-param' | 'unsupported'
+  thinkingReplay: 'verify-replay' | 'replay' | 'drop'
   streaming: boolean
   hostedTools?: string[]
 }
 ```
 
-字段缺失按最保守值处理：布尔值为 `false`，`document='unsupported'`，`thinking='unsupported'`，`hostedTools=[]`。未知 hosted tool 不得发送。
+字段缺失按最保守值处理：布尔值为 `false`，`document='unsupported'`，`thinking='unsupported'`，`thinkingReplay='drop'`，`hostedTools=[]`。未知 hosted tool 不得发送。
 
-`thinking='disabled-param'` 表示关闭 thinking 时必须发送目标 API 的显式 disabled 参数；host 的 `off` 字符串不得原样进入 wire。`thinking='unsupported'` 时不得发送 thinking 控制参数或回放 thinking block。
+`thinking` 只描述端点的 thinking 控制参数：`disabled-param` 表示关闭 thinking 时必须发送目标 API 的显式 disabled 参数；host 的 `off` 字符串不得原样进入 wire；`unsupported` 时不得发送 thinking 控制参数。
+
+`thinkingReplay` 独立描述历史回放策略：
+
+1. `verify-replay`：provider 会校验 provenance token；只有非空 token 的 thinking 可回放。
+2. `replay`：provider 容忍原样回放；空 token thinking 也可回放。
+3. `drop`：回放时丢弃 thinking；未知端点默认使用该档。
+
+Capability 在 codec constructor 中固定。运行中实测发现端点能力与声明不符时，host 只能通过 `updateCapability()` 显式整体替换；`encode()` 与 `call()` 不接受 per-call capability override。
 
 ### 3.2 降级记录
 
@@ -230,10 +239,10 @@ interface DegradationRecord {
 
 ### I2 — thinking 不可截断
 
-流式组装器只能在 thinking block 闭合且取得完整 signature 后把它提交到 IR。steering、abort 或 malformed stream 导致的 partial thinking 必须整块丢弃。校验器拒绝空 signature 或空 providerId；“尽量保留 partial”不是合法降级。
+流式组装器只能在 thinking block 闭合后把它提交到 IR。steering、abort 或 malformed stream 导致的 partial thinking 必须整块丢弃。provider 下发的 provenance token 不得截断、补写或伪造；没有 token 是合法事实，以空字符串记录。校验器拒绝非字符串 token 或空 providerId；“尽量保留 partial”不是合法降级。
 
-- 正例：完整 `thinking_delta` 后收到对应 `signature_delta`，提交一个完整 block。
-- 反例：只收到部分 thinking 后中断；存在 thinking 文本但 signature 为空。两者均不得进入历史。
+- 正例：完整 `thinking_delta` 后 block 正常闭合；有 `signature_delta` 时原样记录，无 token 时记录空字符串。
+- 反例：只收到部分 thinking 后中断；把 provider token 截短或合成一个替代 token。两者均不得进入历史。
 
 ### I3 — Chat Completions 的 tool-call assistant content 为 null
 
@@ -260,7 +269,7 @@ Codec 必须兼容已验证的三种 wire 形态：原生 object、JSON object �
 
 `thinking` 与 `provider_blocks` 必须携带来源 providerId。编码到目标 provider 时，仅保留 providerId 完全相同的 block；其余 block 过滤并记录。校验器在提供目标 providerId 的上下文中报告 mismatch。
 
-- 正例：provider-x 的 thinking 回放给 provider-x，签名和顺序原样保留。
+- 正例：provider-x 的 thinking 回放给 provider-x，并按 `thinkingReplay` 策略原样保留或丢弃 provenance token 与 block。
 - 反例：provider-x 的签名发送给 provider-y；缺 providerId 的 provider block 被视为可移植。
 
 ### I7 — 不支持的 block 在请求侧过滤、降级或报错
@@ -311,7 +320,8 @@ M5 的每类检测必须由至少一条去标识的真实录制 SSE fixture 验�
 ## 5. Codec 边界
 
 - Codec 自己使用 `fetch` 发送请求并解析 SSE，不依赖 provider SDK。
-- Codec 接收原始 model ID、providerId、capability 和 provider 所需连接参数；host 的持久化、路由、密钥发现、重试和 UI 类型不得进入 CanoIR。
+- Codec constructor 接收原始 model ID、providerId、capability 和 provider 所需连接参数；host 的持久化、路由、密钥发现、重试和 UI 类型不得进入 CanoIR。
+- Capability 在 codec 生命周期内稳定；只有 `updateCapability()` 可显式整体替换，任何请求方法都不得提供 per-call override。
 - 请求编码顺序为：校验 IR → 过滤 provider-bound block → capability 门控与降级 → provider 结构正规化 → 生成 wire body。
 - 响应解码顺序为：解析事件 → 完整组装 block → 归一化 usage/stop reason → 退化检测 → 校验可回放 IR。
 - 失败必须带稳定分类，禁止用空响应、空 object 或伪造 tool result 掩盖协议错误。

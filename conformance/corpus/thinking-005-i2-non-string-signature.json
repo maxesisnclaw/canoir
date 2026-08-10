@@ -1,5 +1,5 @@
 {
-  "name": "I2 IR 必须显式记录 provenance token 字符串",
+  "name": "I2 provenance token 必须是字符串",
   "category": "thinking",
   "operation": "validate",
   "invariants": ["I2"],
@@ -11,11 +11,15 @@
           {
             "type": "thinking",
             "thinking": "complete",
+            "signature": null,
             "providerId": "provider-x"
           }
         ]
       }
     ]
   },
-  "expected": { "valid": false, "issueCodes": ["invalid_thinking_provenance"] }
+  "expected": {
+    "valid": false,
+    "issueCodes": ["invalid_thinking_provenance"]
+  }
 }

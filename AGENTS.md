@@ -55,7 +55,7 @@ canoir/
 | Block | 说明 | 关键约束 |
 |---|---|---|
 | `text` | 纯文本 | 空串合法，语义=无文本 |
-| `thinking` | 推理内容 + `signature`（必填，Responses 用伪签名占位） | 不可截断；跨 provider 不可移植 |
+| `thinking` | 推理内容 + `signature` opaque provenance token（字符串；无 token 时为空串） | 不可截断或伪造 token；跨 provider 不可移植 |
 | `tool_call` | `{id, name, arguments: object}` | id 永非空；arguments 永为已解析 object |
 | `tool_result` | `{toolCallId, content, images?}` | 必须能关联到同序列内的 tool_call |
 | `image` | base64 source | 可被 capability 门控 |
@@ -72,7 +72,7 @@ canoir/
 | # | 不变量 | 验收标准 |
 |---|---|---|
 | I1 | assistant 的每个 tool_call 在后续消息中有配对 tool_result；反之 tool_result 必须能关联到已有 tool_call | 语料：孤儿 tool_call / 孤儿 tool_result / 缺 id 的 tool 消息，三种都必须被校验器捕获 |
-| I2 | thinking block 不可截断；steering 中断导致 partial thinking 时整块丢弃 | 语料：流式中断的 thinking 序列 → 输出不含 partial thinking |
+| I2 | thinking block 与 provider provenance token 不可截断或伪造；steering 中断导致 partial thinking 时整块丢弃 | 语料：流式中断不输出 partial；无 token 的完整 block 合法进入 IR |
 | I3 | assistant + tool_calls 时 content 序列化为 `null`（Chat Completions），不是空串 | 语料：带 tool_calls 的 assistant 消息编码后 wire 上 content 是 `null` |
 | I4 | tool_call id 永非空：provider 未返回 id 时 codec 层合成，绝不让空 id 上 wire | 语料：无 id 的 wire tool_call → IR 内 id 非空且稳定 |
 | I5 | IR 内 arguments 永为 object；wire 上的 string/`arguments` 字段等 3 种形态（A5）解析结果一致 | 语料：同一 tool_call 的三种 wire 形态 → 解码出相同 IR |
@@ -103,7 +103,7 @@ canoir/
 - tool_use input 三种兼容形态解析（A5，`anthropic.ts:1068-1103`）
 - 相邻 user 合并（A3，`anthropic.ts:547-558`）
 - usage 非标准位置回填：message_start 全 0 占位 + message_delta 真值（GLM-5.2 兼容端点实证，B2）
-- thinking 流式：signature_delta 排序在 thinking_delta 之后的乱序处理（宿主项目 `b21891c`）；thinking 回放的 interleaved 约束（宿主项目 `1c09e2e`）
+- thinking 流式：signature_delta 排序在 thinking_delta 之后的乱序处理（宿主项目 `b21891c`）；thinking 回放的 interleaved 约束（宿主项目 `1c09e2e`）；完整但无 token 的 thinking 合法解码，是否回放由 `thinkingReplay` 三档 capability 决定
 - 严格 proxy 的 minimal mode（去掉 proxy 不认的字段，`f09a87a`）
 - refusal：HTTP 200 ≠ 成功，stop_reason 驱动错误分类，partial 文本丢弃（J1，`ca11797`）
 
@@ -130,6 +130,7 @@ interface ProviderCapability {
   document: 'native' | 'degrade' | 'unsupported'
   toolCalls: boolean
   thinking: 'native' | 'disabled-param' | 'unsupported'
+  thinkingReplay: 'verify-replay' | 'replay' | 'drop'
   streaming: boolean
   hostedTools?: string[]  // 该端点支持的 server-side tool 类型
 }
@@ -141,7 +142,11 @@ interface ProviderCapability {
 - `document: 'degrade'` → 按优先级尝试：(1) 逐页转 image（vision=true 且内容版式敏感时优先）；(2) 提取纯文本注入。降级路径必须显式记录（哪种降级、为什么），host 可读
 - `document: 'unsupported'` 且无法降级 → **fail-loud**，报出"该 provider 不支持 document"，绝不静默裸发
 - `vision: false` → 请求侧过滤所有 image block + 记录（GLM-5.2 400 实证）
+- `thinkingReplay: 'verify-replay'` → 仅回放带非空 opaque provenance token 的 thinking
+- `thinkingReplay: 'replay'` → 原样回放 thinking，空 token 也合法
+- `thinkingReplay: 'drop'` → 丢弃历史 thinking；未知端点默认该档
 - capability 声明缺失的字段 → 按最保守值处理（fail-closed）
+- capability 进入 codec constructor，在 codec 生命周期内固定；只有 `updateCapability()` 可显式整体替换，禁止任何 per-call override
 
 ## 7. Conformance 语料
 
@@ -175,7 +180,7 @@ interface ProviderCapability {
 - DoD：新增语料 ≥8 条全绿；I3/I9 验收通过
 
 **M4 — openai-responses codec + capability 矩阵**
-- 覆盖 §5 Responses 清单；capability 矩阵接入三个 codec 的编码入口（encode 签名从本里程碑起统一为 `encode(messages, capability)`——注意：这意味着 M2/M3 的 codec 签名要在这里回改一次，这是预期内成本，不是返工事故）
+- 覆盖 §5 Responses 清单；capability 矩阵接入三个 codec constructor，编码入口统一为 `encode(messages, options?)`；运行中能力迁移只允许 `updateCapability()`
 - document 降级格可执行（转 image 用真实 PDF fixture；文本提取可用占位实现但接口必须是真的）
 - DoD：I7 验收通过；降级决策语料 ≥4 条
 

@@ -45,22 +45,22 @@ describe('I11 请求诊断', () => {
       model: 'model-a',
       endpoint: 'https://endpoint-a.example/v1/responses',
       apiKey: 'test-key',
+      capability: {
+        vision: false,
+        document: 'unsupported',
+        toolCalls: true,
+        thinking: 'native',
+        streaming: true,
+      },
       fetch: fetchImpl,
     })
     const messages = [
       { role: 'user' as const, content: [{ type: 'text' as const, text: 'hi' }] },
     ]
-    const capability = {
-      vision: false,
-      document: 'unsupported' as const,
-      toolCalls: true,
-      thinking: 'native' as const,
-      streaming: true,
-    }
-    const encoded = codec.encode(messages, capability)
+    const encoded = codec.encode(messages)
 
     await expect(
-      codec.call(messages, capability, {
+      codec.call(messages, {
         diagnosticWriter: (diagnostic: RequestDiagnostic) => {
           writeFileSync(enabledPath, JSON.stringify(diagnostic))
         },
@@ -72,7 +72,7 @@ describe('I11 请求诊断', () => {
     expect(saved.body).toEqual(sentBody as JsonValue)
     expect(saved.headers.authorization).toBe('Bearer test-key')
 
-    await expect(codec.call(messages, capability)).rejects.toBeInstanceOf(
+    await expect(codec.call(messages)).rejects.toBeInstanceOf(
       OpenAIResponsesHttpError,
     )
     expect(existsSync(disabledPath)).toBe(false)

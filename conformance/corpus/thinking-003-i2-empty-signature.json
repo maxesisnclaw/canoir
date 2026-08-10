@@ -1,5 +1,5 @@
 {
-  "name": "I2 空 signature 表示未闭合 thinking",
+  "name": "I2 空 provenance token 是合法 provider 事实",
   "category": "thinking",
   "operation": "validate",
   "invariants": ["I2"],
@@ -10,7 +10,7 @@
         "content": [
           {
             "type": "thinking",
-            "thinking": "partial",
+            "thinking": "complete",
             "signature": "",
             "providerId": "provider-x"
           }
@@ -18,5 +18,5 @@
       }
     ]
   },
-  "expected": { "valid": false, "issueCodes": ["incomplete_thinking"] }
+  "expected": { "valid": true, "issueCodes": [] }
 }

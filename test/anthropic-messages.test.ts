@@ -39,18 +39,18 @@ describe('AnthropicMessagesCodec transport', () => {
       endpoint: 'https://endpoint-a.example',
       apiKey: 'test-key',
       compatMode: 'minimal',
-      fetch: fetchImpl,
-    })
-    const result = await codec.call(
-      [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
-      {
+      capability: {
         vision: true,
         document: 'unsupported',
         toolCalls: true,
         thinking: 'native',
         streaming: true,
       },
-    )
+      fetch: fetchImpl,
+    })
+    const result = await codec.call([
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+    ])
 
     expect(requestBody).toMatchObject({
       model: 'model-a',

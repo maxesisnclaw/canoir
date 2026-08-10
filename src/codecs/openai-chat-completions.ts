@@ -36,6 +36,7 @@ export interface OpenAIChatCodecConfig {
   apiKey: string
   headers?: Record<string, string>
   toolSchemaDialect?: OpenAIToolSchemaDialect
+  capability: Partial<ProviderCapability>
   fetch?: typeof globalThis.fetch
 }
 
@@ -454,7 +455,6 @@ function encodeTools(
 export function encodeOpenAIChatRequest(
   config: OpenAIChatCodecConfig,
   messages: readonly Message[],
-  capabilityInput: Partial<ProviderCapability>,
   options: OpenAIChatEncodeOptions = {},
 ): OpenAIChatEncodedRequest {
   const validation = validateMessages(messages)
@@ -467,7 +467,7 @@ export function encodeOpenAIChatRequest(
     )
   }
 
-  const capability = normalizeCapability(capabilityInput)
+  const capability = normalizeCapability(config.capability)
   const transformed = applyCapability(messages, capability, options)
   const encoded = encodeMessages(transformed.messages)
   const requestMessages: OpenAIChatWireMessage[] = []
@@ -643,18 +643,25 @@ export function stringifyOpenAIChatRequest(body: OpenAIChatRequestBody): string 
 }
 
 export class OpenAIChatCompletionsCodec {
-  private readonly config: OpenAIChatCodecConfig
+  private capability: ProviderCapability
 
-  constructor(config: OpenAIChatCodecConfig) {
-    this.config = config
+  constructor(private readonly config: OpenAIChatCodecConfig) {
+    this.capability = normalizeCapability(config.capability)
+  }
+
+  updateCapability(capability: Partial<ProviderCapability>): void {
+    this.capability = normalizeCapability(capability)
   }
 
   encode(
     messages: readonly Message[],
-    capability: Partial<ProviderCapability>,
     options: OpenAIChatEncodeOptions = {},
   ): OpenAIChatEncodedRequest {
-    return encodeOpenAIChatRequest(this.config, messages, capability, options)
+    return encodeOpenAIChatRequest(
+      { ...this.config, capability: this.capability },
+      messages,
+      options,
+    )
   }
 
   decode(
@@ -666,10 +673,9 @@ export class OpenAIChatCompletionsCodec {
 
   async call(
     messages: readonly Message[],
-    capability: Partial<ProviderCapability>,
     options: OpenAIChatEncodeOptions = {},
   ): Promise<OpenAIChatDecodedResponse> {
-    const request = this.encode(messages, capability, options)
+    const request = this.encode(messages, options)
     await writeRequestDiagnostic(options.diagnosticWriter, {
       method: 'POST',
       url: request.url,

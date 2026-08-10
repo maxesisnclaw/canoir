@@ -246,14 +246,14 @@ function validateBlockSchema(
           'thinking 必须是字符串',
         )
       }
-      if (!isNonEmptyString(block.signature)) {
+      if (typeof block.signature !== 'string') {
         addIssue(
           issues,
           'I2',
-          'incomplete_thinking',
+          'invalid_thinking_provenance',
           messageIndex,
           blockIndex,
-          'thinking 缺少完整 signature，不得进入历史',
+          'thinking.signature 必须是 provider 下发的 opaque provenance token；无 token 时使用空字符串',
         )
       }
       validateProviderBinding(

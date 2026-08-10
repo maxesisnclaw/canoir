@@ -96,7 +96,9 @@ describe('validation conformance corpus', () => {
       const relevant = cases.filter((item) =>
         item.invariants.includes(invariant),
       )
-      expect(relevant.filter((item) => item.expected.valid)).toHaveLength(2)
+      expect(
+        relevant.filter((item) => item.expected.valid).length,
+      ).toBeGreaterThanOrEqual(2)
       expect(
         relevant.filter((item) => !item.expected.valid).length,
       ).toBeGreaterThanOrEqual(2)

@@ -1,0 +1,65 @@
+{
+  "name": "Anthropic 无 token thinking 在 verify-replay 策略下不回放",
+  "category": "thinking",
+  "operation": "anthropic-decode-reencode",
+  "recorded": true,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key",
+      "compatMode": "minimal"
+    },
+    "capability": {
+      "vision": true,
+      "document": "unsupported",
+      "toolCalls": true,
+      "thinking": "unsupported",
+      "thinkingReplay": "verify-replay",
+      "streaming": true
+    },
+    "events": [
+      { "event": "message_start", "data": { "type": "message_start", "message": { "content": [], "stop_reason": null, "usage": { "input_tokens": 5, "output_tokens": 0 } } } },
+      { "event": "content_block_start", "data": { "type": "content_block_start", "index": 0, "content_block": { "type": "thinking", "thinking": "" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 0, "delta": { "type": "thinking_delta", "thinking": "analysis" } } },
+      { "event": "content_block_stop", "data": { "type": "content_block_stop", "index": 0 } },
+      { "event": "content_block_start", "data": { "type": "content_block_start", "index": 1, "content_block": { "type": "text", "text": "" } } },
+      { "event": "content_block_delta", "data": { "type": "content_block_delta", "index": 1, "delta": { "type": "text_delta", "text": "answer" } } },
+      { "event": "content_block_stop", "data": { "type": "content_block_stop", "index": 1 } },
+      { "event": "message_delta", "data": { "type": "message_delta", "delta": { "stop_reason": "end_turn" }, "usage": { "output_tokens": 4 } } },
+      { "event": "message_stop", "data": { "type": "message_stop" } }
+    ]
+  },
+  "expected": {
+    "decoded": {
+      "message": {
+        "role": "assistant",
+        "content": [
+          { "type": "thinking", "thinking": "analysis", "signature": "", "providerId": "provider-x" },
+          { "type": "text", "text": "answer" },
+          { "type": "provider_blocks", "providerId": "provider-x", "blocks": [
+            { "type": "thinking", "thinking": "analysis" },
+            { "type": "text", "text": "answer" }
+          ] }
+        ]
+      },
+      "usage": { "totalInputTokens": 5, "outputTokens": 4, "reliable": true },
+      "stopReason": "end_turn"
+    },
+    "replayBody": {
+      "model": "model-a",
+      "max_tokens": 32000,
+      "messages": [
+        { "role": "user", "content": [{ "type": "text", "text": "continue" }] },
+        { "role": "assistant", "content": [{ "type": "text", "text": "answer" }] }
+      ],
+      "stream": true
+    },
+    "degradations": [{
+      "blockType": "thinking",
+      "action": "filtered",
+      "reason": "目标 provider 要求 provenance token，过滤空 token thinking"
+    }]
+  }
+}

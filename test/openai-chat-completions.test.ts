@@ -20,18 +20,18 @@ describe('OpenAIChatCompletionsCodec transport', () => {
       model: 'model-a',
       endpoint: 'https://endpoint-a.example',
       apiKey: 'test-key',
-      fetch: fetchImpl,
-    })
-    const result = await codec.call(
-      [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
-      {
+      capability: {
         vision: true,
         document: 'unsupported',
         toolCalls: true,
         thinking: 'native',
         streaming: false,
       },
-    )
+      fetch: fetchImpl,
+    })
+    const result = await codec.call([
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+    ])
 
     expect(requestBody).toEqual({
       model: 'model-a',

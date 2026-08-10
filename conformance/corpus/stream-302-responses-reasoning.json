@@ -30,7 +30,7 @@
     "message": {
       "role": "assistant",
       "content": [
-        { "type": "thinking", "thinking": "checking plan", "signature": "openai-responses:rs-a", "providerId": "provider-x" },
+        { "type": "thinking", "thinking": "checking plan", "signature": "enc-a", "providerId": "provider-x" },
         { "type": "text", "text": "done" },
         {
           "type": "provider_blocks",

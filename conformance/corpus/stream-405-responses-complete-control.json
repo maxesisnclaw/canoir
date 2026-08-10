@@ -32,7 +32,7 @@
     "message": {
       "role": "assistant",
       "content": [
-        { "type": "thinking", "thinking": "analysis", "signature": "openai-responses:reasoning-a", "providerId": "provider-x" },
+        { "type": "thinking", "thinking": "analysis", "signature": "encrypted-a", "providerId": "provider-x" },
         { "type": "text", "text": "result" },
         {
           "type": "provider_blocks",

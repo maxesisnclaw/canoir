@@ -44,6 +44,7 @@ export interface AnthropicCodecConfig {
   headers?: Record<string, string>
   compatMode?: AnthropicCompatMode
   contextWindowTokens?: number
+  capability: Partial<ProviderCapability>
   fetch?: typeof globalThis.fetch
 }
 
@@ -380,12 +381,36 @@ function encodeToolResult(block: ToolResultBlock): JsonValue {
   }
 }
 
-function encodeThinking(block: ThinkingBlock, providerId: string): JsonValue | null {
+function canReplayThinking(
+  signature: unknown,
+  replay: ProviderCapability['thinkingReplay'],
+): boolean {
+  if (replay === 'drop') return false
+  return replay === 'replay' || isNonEmptyString(signature)
+}
+
+function encodeThinking(
+  block: ThinkingBlock,
+  providerId: string,
+  replay: ProviderCapability['thinkingReplay'],
+  degradations: DegradationRecord[],
+): JsonValue | null {
   if (block.providerId !== providerId) return null
+  if (!canReplayThinking(block.signature, replay)) {
+    degradations.push({
+      blockType: 'thinking',
+      action: 'filtered',
+      reason:
+        replay === 'drop'
+          ? '目标 provider 的 thinkingReplay capability 为 drop'
+          : '目标 provider 要求 provenance token，过滤空 token thinking',
+    })
+    return null
+  }
   return {
     type: 'thinking',
     thinking: block.thinking,
-    signature: block.signature,
+    ...(block.signature.length === 0 ? {} : { signature: block.signature }),
   }
 }
 
@@ -401,17 +426,45 @@ function encodeToolCall(block: ToolCallBlock): JsonValue {
 function sameProviderRawBlocks(
   content: readonly Block[],
   providerId: string,
+  replay: ProviderCapability['thinkingReplay'],
+  degradations: DegradationRecord[],
 ): JsonValue[] | undefined {
   const raw = content.find(
     (block): block is ProviderBlocksBlock =>
       block.type === 'provider_blocks' && block.providerId === providerId,
   )
-  return raw?.blocks
+  if (raw === undefined) return undefined
+  let filteredThinking = false
+  const blocks = raw.blocks.filter((block) => {
+    if (!isRecord(block)) return true
+    if (block.type === 'redacted_thinking') {
+      const keep = replay !== 'drop'
+      if (!keep) filteredThinking = true
+      return keep
+    }
+    if (block.type !== 'thinking') return true
+    const keep = canReplayThinking(block.signature, replay)
+    if (!keep) filteredThinking = true
+    return keep
+  })
+  if (filteredThinking) {
+    degradations.push({
+      blockType: 'thinking',
+      action: 'filtered',
+      reason:
+        replay === 'drop'
+          ? '目标 provider 的 thinkingReplay capability 为 drop'
+          : '目标 provider 要求 provenance token，过滤空 token thinking',
+    })
+  }
+  return blocks
 }
 
 function encodeMessage(
   message: Message,
   providerId: string,
+  replay: ProviderCapability['thinkingReplay'],
+  degradations: DegradationRecord[],
 ): AnthropicWireMessage | undefined {
   if (message.role === 'tool') {
     return {
@@ -421,9 +474,16 @@ function encodeMessage(
   }
 
   if (message.role === 'assistant') {
-    const rawBlocks = sameProviderRawBlocks(message.content, providerId)
+    const rawBlocks = sameProviderRawBlocks(
+      message.content,
+      providerId,
+      replay,
+      degradations,
+    )
     if (rawBlocks !== undefined) {
-      return { role: 'assistant', content: rawBlocks }
+      return rawBlocks.length === 0
+        ? undefined
+        : { role: 'assistant', content: rawBlocks }
     }
   }
 
@@ -440,7 +500,12 @@ function encodeMessage(
         content.push(encodeDocument(block))
         break
       case 'thinking': {
-        const encoded = encodeThinking(block, providerId)
+        const encoded = encodeThinking(
+          block,
+          providerId,
+          replay,
+          degradations,
+        )
         if (encoded !== null) content.push(encoded)
         break
       }
@@ -551,7 +616,6 @@ function addDefaultCacheControls(body: AnthropicRequestBody): void {
 export function encodeAnthropicRequest(
   config: AnthropicCodecConfig,
   messages: readonly Message[],
-  capabilityInput: Partial<ProviderCapability>,
   options: AnthropicEncodeOptions = {},
 ): AnthropicEncodedRequest {
   const validation = validateMessages(messages)
@@ -564,10 +628,17 @@ export function encodeAnthropicRequest(
     )
   }
 
-  const capability = normalizeCapability(capabilityInput)
+  const capability = normalizeCapability(config.capability)
   const transformed = applyCapability(messages, capability, options)
   const encoded = transformed.messages
-    .map((message) => encodeMessage(message, config.providerId))
+    .map((message) =>
+      encodeMessage(
+        message,
+        config.providerId,
+        capability.thinkingReplay,
+        transformed.degradations,
+      ),
+    )
     .filter((message): message is AnthropicWireMessage => message !== undefined)
   const requestMessages = mergeAdjacentMessages(encoded)
 
@@ -677,16 +748,17 @@ function decodeContentBlocks(
         break
       }
       case 'thinking': {
-        if (typeof value.thinking !== 'string' || !isNonEmptyString(value.signature)) {
+        if (typeof value.thinking !== 'string') {
           throw new AnthropicProtocolError(
             'incomplete_thinking',
-            `response.content[${blockIndex}] thinking 缺少完整 signature`,
+            `response.content[${blockIndex}].thinking 必须是字符串`,
           )
         }
         normalized.push({
           type: 'thinking',
           thinking: value.thinking,
-          signature: value.signature,
+          signature:
+            typeof value.signature === 'string' ? value.signature : '',
           providerId,
         })
         break
@@ -838,12 +910,13 @@ function finishStreamBlock(
     case 'text':
       return { type: 'text', text: state.text }
     case 'thinking':
-      if (state.signature.length === 0) return undefined
-      return {
-        type: 'thinking',
-        thinking: state.thinking,
-        signature: state.signature,
-      }
+      return state.signature.length === 0
+        ? { type: 'thinking', thinking: state.thinking }
+        : {
+            type: 'thinking',
+            thinking: state.thinking,
+            signature: state.signature,
+          }
     case 'tool_use': {
       const name = requireNonEmptyString(
         state.start.name,
@@ -1069,17 +1142,26 @@ export function parseAnthropicSse(text: string): AnthropicSseEvent[] {
 
 export class AnthropicMessagesCodec {
   private readonly fetchImpl: typeof globalThis.fetch
+  private capability: ProviderCapability
 
   constructor(private readonly config: AnthropicCodecConfig) {
     this.fetchImpl = config.fetch ?? globalThis.fetch
+    this.capability = normalizeCapability(config.capability)
+  }
+
+  updateCapability(capability: Partial<ProviderCapability>): void {
+    this.capability = normalizeCapability(capability)
   }
 
   encode(
     messages: readonly Message[],
-    capability: Partial<ProviderCapability>,
     options: AnthropicEncodeOptions = {},
   ): AnthropicEncodedRequest {
-    return encodeAnthropicRequest(this.config, messages, capability, options)
+    return encodeAnthropicRequest(
+      { ...this.config, capability: this.capability },
+      messages,
+      options,
+    )
   }
 
   decode(
@@ -1098,10 +1180,9 @@ export class AnthropicMessagesCodec {
 
   async call(
     messages: readonly Message[],
-    capability: Partial<ProviderCapability>,
     options: AnthropicEncodeOptions = {},
   ): Promise<AnthropicDecodedResponse> {
-    const request = this.encode(messages, capability, options)
+    const request = this.encode(messages, options)
     await writeRequestDiagnostic(options.diagnosticWriter, {
       method: 'POST',
       url: request.url,

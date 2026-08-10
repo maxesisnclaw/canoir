@@ -129,6 +129,7 @@ function anthropicCodecConfig(input: JsonObject): AnthropicCodecConfig {
     model: value.model,
     endpoint: value.endpoint,
     apiKey: value.apiKey,
+    capability: providerCapability(input, anthropicDefaultCapability),
     ...(value.compatMode === 'minimal' || value.compatMode === 'default'
       ? { compatMode: value.compatMode }
       : {}),
@@ -167,6 +168,7 @@ function openAIChatCodecConfig(input: JsonObject): OpenAIChatCodecConfig {
     model: value.model,
     endpoint: value.endpoint,
     apiKey: value.apiKey,
+    capability: providerCapability(input, openAIChatDefaultCapability),
     ...(headers === undefined ? {} : { headers }),
     ...(value.toolSchemaDialect === 'gemini-openapi'
       ? { toolSchemaDialect: value.toolSchemaDialect }
@@ -192,6 +194,7 @@ function openAIResponsesCodecConfig(
     model: value.model,
     endpoint: value.endpoint,
     apiKey: value.apiKey,
+    capability: providerCapability(input, openAIResponsesDefaultCapability),
   }
 }
 
@@ -263,6 +266,11 @@ function providerCapability(
       value.thinking === 'native' || value.thinking === 'disabled-param'
         ? value.thinking
         : 'unsupported',
+    thinkingReplay:
+      value.thinkingReplay === 'verify-replay' ||
+      value.thinkingReplay === 'replay'
+        ? value.thinkingReplay
+        : 'drop',
     streaming: value.streaming === true,
     ...(Array.isArray(value.hostedTools) &&
     value.hostedTools.every((item) => typeof item === 'string')
@@ -276,6 +284,7 @@ const anthropicDefaultCapability: ProviderCapability = {
   document: 'unsupported',
   toolCalls: true,
   thinking: 'native',
+  thinkingReplay: 'verify-replay',
   streaming: true,
 }
 
@@ -284,6 +293,7 @@ const openAIChatDefaultCapability: ProviderCapability = {
   document: 'unsupported',
   toolCalls: true,
   thinking: 'native',
+  thinkingReplay: 'drop',
   streaming: false,
 }
 
@@ -292,6 +302,7 @@ const openAIResponsesDefaultCapability: ProviderCapability = {
   document: 'native',
   toolCalls: true,
   thinking: 'native',
+  thinkingReplay: 'verify-replay',
   streaming: true,
 }
 
@@ -413,7 +424,6 @@ export async function runConformanceCase(
         const codec = new AnthropicMessagesCodec(anthropicCodecConfig(item.input))
         const request = codec.encode(
           messages(item.input),
-          providerCapability(item.input, anthropicDefaultCapability),
           encodeOptions(item.input),
         )
         actual = item.input.includeHeaders === true
@@ -463,6 +473,32 @@ export async function runConformanceCase(
         )
         break
       }
+      case 'anthropic-decode-reencode': {
+        const codec = new AnthropicMessagesCodec(anthropicCodecConfig(item.input))
+        const decoded = codec.decodeStream(
+          sseEvents(item.input),
+          degradationOptions(item.input),
+        )
+        const replay = codec.encode(
+          [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'continue' }],
+            },
+            decoded.message,
+          ],
+          encodeOptions(item.input),
+        )
+        actual = toJsonValue(
+          {
+            decoded,
+            replayBody: replay.body,
+            degradations: replay.degradations,
+          },
+          `${item.name}.actual`,
+        )
+        break
+      }
       case 'anthropic-stringify':
         actual = stringifyActual(item.input)
         break
@@ -472,7 +508,6 @@ export async function runConformanceCase(
         )
         const request = codec.encode(
           messages(item.input),
-          providerCapability(item.input, openAIChatDefaultCapability),
           openAIChatEncodeOptions(item.input),
         )
         actual = item.input.includeEnvelope === true
@@ -543,7 +578,6 @@ export async function runConformanceCase(
         )
         const request = codec.encode(
           messages(item.input),
-          providerCapability(item.input, openAIResponsesDefaultCapability),
           openAIResponsesEncodeOptions(item.input),
         )
         actual = item.input.includeEnvelope === true

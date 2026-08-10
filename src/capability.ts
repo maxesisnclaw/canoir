@@ -12,6 +12,7 @@ export interface ProviderCapability {
   document: 'native' | 'degrade' | 'unsupported'
   toolCalls: boolean
   thinking: 'native' | 'disabled-param' | 'unsupported'
+  thinkingReplay: 'verify-replay' | 'replay' | 'drop'
   streaming: boolean
   hostedTools?: string[]
 }
@@ -62,6 +63,11 @@ export function normalizeCapability(
       capability.thinking === 'disabled-param'
         ? capability.thinking
         : 'unsupported',
+    thinkingReplay:
+      capability.thinkingReplay === 'verify-replay' ||
+      capability.thinkingReplay === 'replay'
+        ? capability.thinkingReplay
+        : 'drop',
     streaming: capability.streaming === true,
     ...(capability.hostedTools === undefined
       ? {}
@@ -150,7 +156,6 @@ function transformUserBlocks(
 function transformAssistantBlocks(
   blocks: readonly AssistantBlock[],
   capability: ProviderCapability,
-  degradations: DegradationRecord[],
 ): AssistantBlock[] {
   const transformed: AssistantBlock[] = []
   for (const block of blocks) {
@@ -159,25 +164,6 @@ function transformAssistantBlocks(
         'tool_calls_unsupported',
         '该 provider 不支持 tool calls',
       )
-    }
-    if (block.type === 'thinking' && capability.thinking === 'unsupported') {
-      degradations.push({
-        blockType: 'thinking',
-        action: 'filtered',
-        reason: '目标 provider 不支持 thinking 回放',
-      })
-      continue
-    }
-    if (
-      block.type === 'provider_blocks' &&
-      capability.thinking === 'unsupported'
-    ) {
-      degradations.push({
-        blockType: 'provider_blocks',
-        action: 'filtered',
-        reason: '目标 provider 不支持 provider-bound reasoning 回放',
-      })
-      continue
     }
     transformed.push(block)
   }
@@ -231,7 +217,6 @@ export function applyCapability(
           content: transformAssistantBlocks(
             message.content,
             capability,
-            degradations,
           ),
         }
       case 'tool':
