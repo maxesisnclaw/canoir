@@ -1,0 +1,23 @@
+{
+  "name": "I6 thinking 不可跨 provider 回放",
+  "category": "compat",
+  "operation": "validate",
+  "invariants": ["I6"],
+  "input": {
+    "options": { "targetProviderId": "provider-y" },
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "complete",
+            "signature": "sig-1",
+            "providerId": "provider-x"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": false, "issueCodes": ["provider_mismatch"] }
+}

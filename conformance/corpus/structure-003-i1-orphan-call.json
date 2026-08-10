@@ -1,0 +1,17 @@
+{
+  "name": "I1 孤儿工具调用",
+  "category": "structure",
+  "operation": "validate",
+  "invariants": ["I1"],
+  "input": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          { "type": "tool_call", "id": "call-1", "name": "lookup", "arguments": {} }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": false, "issueCodes": ["orphan_tool_call"] }
+}

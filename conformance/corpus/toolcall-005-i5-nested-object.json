@@ -1,0 +1,31 @@
+{
+  "name": "I5 嵌套 JSON object 参数",
+  "category": "toolcall",
+  "operation": "validate",
+  "invariants": ["I5"],
+  "input": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "lookup",
+            "arguments": {
+              "query": { "terms": ["canoe", "river"], "exact": false },
+              "limit": 3
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          { "type": "tool_result", "toolCallId": "call-1", "content": "ok" }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": true, "issueCodes": [] }
+}

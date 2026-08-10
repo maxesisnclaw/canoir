@@ -1,0 +1,32 @@
+{
+  "name": "I4 codec 合成的稳定工具调用 ID",
+  "category": "toolcall",
+  "operation": "validate",
+  "invariants": ["I4"],
+  "input": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "id": "synthetic-provider-x-0-a1b2",
+            "name": "lookup",
+            "arguments": {}
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          {
+            "type": "tool_result",
+            "toolCallId": "synthetic-provider-x-0-a1b2",
+            "content": "ok"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": true, "issueCodes": [] }
+}

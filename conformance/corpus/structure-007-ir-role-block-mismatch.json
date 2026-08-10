@@ -1,0 +1,17 @@
+{
+  "name": "IR role 与 block 组合错误",
+  "category": "structure",
+  "operation": "validate",
+  "invariants": [],
+  "input": {
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "tool_call", "id": "call-1", "name": "lookup", "arguments": {} }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": false, "issueCodes": ["block_not_allowed_for_role"] }
+}

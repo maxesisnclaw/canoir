@@ -1,0 +1,70 @@
+{
+  "name": "IR 全部 block 类型可被校验器识别",
+  "category": "structure",
+  "operation": "validate",
+  "invariants": [],
+  "input": {
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          { "type": "text", "text": "inspect" },
+          {
+            "type": "image",
+            "source": { "type": "base64", "mediaType": "image/png", "data": "aW1hZ2U=" }
+          },
+          {
+            "type": "document",
+            "source": { "type": "text", "mediaType": "text/plain", "text": "document" }
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "complete",
+            "signature": "sig-1",
+            "providerId": "provider-x"
+          },
+          { "type": "tool_call", "id": "call-1", "name": "inspect", "arguments": {} }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          {
+            "type": "tool_result",
+            "toolCallId": "call-1",
+            "content": "ok",
+            "images": [
+              {
+                "type": "image",
+                "source": { "type": "base64", "mediaType": "image/png", "data": "cmVzdWx0" }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "provider_blocks",
+            "providerId": "provider-x",
+            "blocks": [{ "type": "opaque", "payload": null }]
+          },
+          { "type": "text", "text": "done" }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          { "type": "refusal", "category": "policy", "explanation": "declined" }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": true, "issueCodes": [] }
+}

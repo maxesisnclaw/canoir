@@ -1,0 +1,22 @@
+{
+  "name": "I2 空 signature 表示未闭合 thinking",
+  "category": "thinking",
+  "operation": "validate",
+  "invariants": ["I2"],
+  "input": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "partial",
+            "signature": "",
+            "providerId": "provider-x"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": false, "issueCodes": ["incomplete_thinking"] }
+}

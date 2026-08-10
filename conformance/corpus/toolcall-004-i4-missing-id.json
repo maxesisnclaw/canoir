@@ -1,0 +1,17 @@
+{
+  "name": "I4 缺失工具调用 ID",
+  "category": "toolcall",
+  "operation": "validate",
+  "invariants": ["I4"],
+  "input": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          { "type": "tool_call", "name": "lookup", "arguments": {} }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": false, "issueCodes": ["empty_tool_call_id"] }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "I4 provider 返回的非空工具调用 ID",
+  "category": "toolcall",
+  "operation": "validate",
+  "invariants": ["I4"],
+  "input": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          { "type": "tool_call", "id": "call-provider-1", "name": "lookup", "arguments": {} }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          { "type": "tool_result", "toolCallId": "call-provider-1", "content": "ok" }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": true, "issueCodes": [] }
+}

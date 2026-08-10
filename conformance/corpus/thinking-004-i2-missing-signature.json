@@ -1,0 +1,21 @@
+{
+  "name": "I2 缺失 signature 的 partial thinking",
+  "category": "thinking",
+  "operation": "validate",
+  "invariants": ["I2"],
+  "input": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "partial",
+            "providerId": "provider-x"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": false, "issueCodes": ["incomplete_thinking"] }
+}

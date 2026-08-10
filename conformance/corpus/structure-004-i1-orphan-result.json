@@ -1,0 +1,17 @@
+{
+  "name": "I1 孤儿工具结果",
+  "category": "structure",
+  "operation": "validate",
+  "invariants": ["I1"],
+  "input": {
+    "messages": [
+      {
+        "role": "tool",
+        "content": [
+          { "type": "tool_result", "toolCallId": "call-404", "content": "missing" }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": false, "issueCodes": ["orphan_tool_result"] }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "I1 工具结果缺少调用 ID",
+  "category": "structure",
+  "operation": "validate",
+  "invariants": ["I1"],
+  "input": {
+    "messages": [
+      {
+        "role": "tool",
+        "content": [
+          { "type": "tool_result", "toolCallId": "", "content": "missing id" }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": false, "issueCodes": ["missing_tool_call_id"] }
+}

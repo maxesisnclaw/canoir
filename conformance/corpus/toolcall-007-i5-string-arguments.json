@@ -1,0 +1,28 @@
+{
+  "name": "I5 未解析字符串参数非法",
+  "category": "toolcall",
+  "operation": "validate",
+  "invariants": ["I5"],
+  "input": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "lookup",
+            "arguments": "{\"query\":\"canoe\"}"
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          { "type": "tool_result", "toolCallId": "call-1", "content": "ok" }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": false, "issueCodes": ["arguments_not_object"] }
+}

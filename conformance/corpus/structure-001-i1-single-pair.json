@@ -1,0 +1,28 @@
+{
+  "name": "I1 单个工具调用与结果配对",
+  "category": "structure",
+  "operation": "validate",
+  "invariants": ["I1"],
+  "input": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "tool_call",
+            "id": "call-1",
+            "name": "lookup",
+            "arguments": { "query": "canoe" }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          { "type": "tool_result", "toolCallId": "call-1", "content": "ok" }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": true, "issueCodes": [] }
+}

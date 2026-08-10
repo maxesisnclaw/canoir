@@ -1,0 +1,22 @@
+{
+  "name": "I2 完整 thinking 可进入历史",
+  "category": "thinking",
+  "operation": "validate",
+  "invariants": ["I2"],
+  "input": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "considering",
+            "signature": "sig-1",
+            "providerId": "provider-x"
+          }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": true, "issueCodes": [] }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "I1 并行工具调用全部配对",
+  "category": "structure",
+  "operation": "validate",
+  "invariants": ["I1"],
+  "input": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          { "type": "tool_call", "id": "call-a", "name": "first", "arguments": {} },
+          { "type": "tool_call", "id": "call-b", "name": "second", "arguments": {} }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          { "type": "tool_result", "toolCallId": "call-a", "content": "a" },
+          { "type": "tool_result", "toolCallId": "call-b", "content": "b" }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": true, "issueCodes": [] }
+}

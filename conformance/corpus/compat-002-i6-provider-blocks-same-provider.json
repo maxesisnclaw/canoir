@@ -1,0 +1,22 @@
+{
+  "name": "I6 原生 block 在同 provider 回放",
+  "category": "compat",
+  "operation": "validate",
+  "invariants": ["I6"],
+  "input": {
+    "options": { "targetProviderId": "provider-x" },
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "provider_blocks",
+            "providerId": "provider-x",
+            "blocks": [{ "type": "reasoning", "encrypted_content": "opaque" }]
+          }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": true, "issueCodes": [] }
+}
