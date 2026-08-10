@@ -1,0 +1,209 @@
+# AGENTS.md — CanoIR
+
+> 本文件是实现 agent 的最高指引。写代码前先读完。本文件的优先级高于你自己的工程直觉。
+
+## 0. 元规则（防三种已知失败模式）
+
+实现本项目的 agent 有三种已被预判的失败模式，对应三条硬规则：
+
+**R1 禁止子步骤蔓延。** §8 的 M0–M5 是唯一合法计划，顺序即依赖序。如果你在 M3 发现地基没打牢，**停下来修地基**——回改 M0–M2 的产物（通常是 SPEC.md 或类型定义），然后继续 M3。禁止创建 3.1/3.2 式子任务来绕过地基问题。发现 spec 缺陷的正确动作是改 spec，不是在代码里加变通层。
+
+**R2 关键承载点不可偷工。** §4 每条不变量附有验收标准（具体测试形态）。里程碑完成判定的第一项就是逐条核对承载点验收——缺一项，该里程碑不算完成，无论代码看起来多完整。
+
+**R3 过度设计黑名单。** 除非本文件明确要求，禁止引入：插件系统、事件总线、依赖注入容器、配置框架、注册表模式、抽象基类（除非有两个真实消费者同时存在）、为"将来可能的需求"预留的字段或参数。每个公开 API 必须能指出一个当前真实消费者。写不出消费者的，删掉。
+
+## 1. 项目使命
+
+CanoIR 是多 LLM API 的**协议中间层**。任何 agent harness 可以把消息建模、编解码、能力协商三件事整个委托给它，自身不需要理解任何一家 API 的消息格式。
+
+边界不由"我们不做什么"定义，而由接入面定义：
+
+- 本包**零 host import**。host 的细节（持久化、路由、密钥、重试策略、UI）全部通过接口注入，不出现在本包类型里。
+- 验收测试是真实的：第一个消费者 MaxClaw 接入时不需要任何 shim、全局状态或临时 bridge。接入需要打补丁 = 边界画错了，改边界，不打补丁。
+
+**当前唯一消费者**：MaxClaw maxclaw-direct runtime（`/Users/maxesisn/maxclaw/`）。第二个预期消费者：将来的 ReAct loop 组件。不为第三个假想消费者设计任何东西（见 R3）。
+
+## 2. 仓库结构（目标形态，M0 搭建）
+
+```
+canoir/
+├── AGENTS.md            # 本文件
+├── SPEC.md              # 协议规范，单一事实源（M0 产出）
+├── README.md            # 一句话正向宣称 + 最小接入示例
+├── src/
+│   ├── types.ts         # IR 消息模型（§3）
+│   ├── validate.ts      # 消息序列合法性校验器（§4 不变量的可执行形态）
+│   ├── capability.ts    # capability 矩阵 + 降级策略（§6）
+│   └── codecs/
+│       ├── anthropic-messages.ts
+│       ├── openai-chat-completions.ts
+│       └── openai-responses.ts
+├── conformance/
+│   ├── runner.ts        # 语料 runner
+│   └── corpus/          # 语料 case，纯 JSON 数据，一个 case 一个文件
+└── test/
+```
+
+技术栈：TypeScript strict（无 `any`）、零运行时依赖（编解码器自己发 fetch、自己解析 SSE，不引入各家官方 SDK——它们正是要替代的耦合源）。测试用 vitest 或 bun test，选一个，不讨论。
+
+## 3. IR 消息模型（normative 摘要，SPEC.md 以此展开）
+
+**Role**：只有 `user` / `assistant` / `tool` 三种。Anthropic 的 user 内嵌 tool_result、Responses 的 function_call_output 等各家形态，进 IR 时统一映射，出 IR 时由 codec 还原。
+
+**Block 类型**（assistant/user 消息的 content 是 block 数组）：
+
+| Block | 说明 | 关键约束 |
+|---|---|---|
+| `text` | 纯文本 | 空串合法，语义=无文本 |
+| `thinking` | 推理内容 + `signature`（必填，Responses 用伪签名占位） | 不可截断；跨 provider 不可移植 |
+| `tool_call` | `{id, name, arguments: object}` | id 永非空；arguments 永为已解析 object |
+| `tool_result` | `{toolCallId, content, images?}` | 必须能关联到同序列内的 tool_call |
+| `image` | base64 source | 可被 capability 门控 |
+| `document` | base64/url/text source | 可被 capability 门控 + 降级（§6） |
+| `refusal` | `{category?, explanation?}` | stop_reason=refusal 的结构化形态 |
+| `provider_blocks` | 同 provider verbatim 回放的原生 block | 跨 provider 必须丢弃 |
+
+**usage 归一化**：`{totalInputTokens, outputTokens}`。各 codec 自己算对（Anthropic =input+cache_read+cache_creation 三项相加；OpenAI 单次值不叠加）。不可靠的 usage（全 0 占位）必须标记为不可靠，不得以 0 值污染上层。
+
+## 4. 消息序列不变量（关键承载点 + 验收标准）
+
+每条不变量必须在 `validate.ts` 有可执行检查，且 conformance 语料有对应用例。**这是 R2 的核心清单：**
+
+| # | 不变量 | 验收标准 |
+|---|---|---|
+| I1 | assistant 的每个 tool_call 在后续消息中有配对 tool_result；反之 tool_result 必须能关联到已有 tool_call | 语料：孤儿 tool_call / 孤儿 tool_result / 缺 id 的 tool 消息，三种都必须被校验器捕获 |
+| I2 | thinking block 不可截断；steering 中断导致 partial thinking 时整块丢弃 | 语料：流式中断的 thinking 序列 → 输出不含 partial thinking |
+| I3 | assistant + tool_calls 时 content 序列化为 `null`（Chat Completions），不是空串 | 语料：带 tool_calls 的 assistant 消息编码后 wire 上 content 是 `null` |
+| I4 | tool_call id 永非空：provider 未返回 id 时 codec 层合成，绝不让空 id 上 wire | 语料：无 id 的 wire tool_call → IR 内 id 非空且稳定 |
+| I5 | IR 内 arguments 永为 object；wire 上的 string/`arguments` 字段等 3 种形态（A5）解析结果一致 | 语料：同一 tool_call 的三种 wire 形态 → 解码出相同 IR |
+| I6 | thinking/provider_blocks 跨 providerId 不可移植，切换 provider 时过滤 | 语料：混合 provider 历史 → 编码时只保留本 provider 的块 |
+| I7 | capability 不支持的 block 在**请求侧**被过滤或显式降级，绝不裸发 | 语料：vision=false + 含图消息 → 图被过滤且有降级记录；document 不支持 → 走 §6 降级格 |
+| I8 | 消息序列经 codec 规范化后满足目标 API 的结构约束（Anthropic 严格交替、相邻 user 合并；Responses 空 content 补占位） | 语料：user→user 相邻序列 → Anthropic 编码输出严格交替 |
+| I9 | model 字段与能力开关分离：`[1m]` 式显示名/后缀绝不泄漏到 wire；能力走 beta header | 语料：contextWindow≥1M → model 字段干净 + betas 含对应 header |
+| I10 | 退化响应五类可检测：max_tokens 截断、refusal partial、runaway thinking（无 text 无 tool 且 thinking 超预算）、空响应、流式组装丢字段 | 语料：五类各至少一条真实录制的 SSE 流 → 检测器全部命中；空响应绝不进入可回放历史 |
+| I11 | 400 诊断可回放：codec 支持把出站请求 body 落盘，供事后回放定位 | 单测：开启诊断模式后请求 body 完整落盘且可重新编码 |
+
+## 5. Codec 实现必读（corner case 知识库）
+
+**动手写每个 codec 之前，必读这两份材料**（它们是从 MaxClaw 生产事故里挖出来的实证，不是理论）：
+
+1. `/Users/maxesisn/maxclaw/tmp/protocol-survey.md` — 三家 API 结构面对照表（Part A）+ 历史坑（Part B）
+2. MaxClaw 现有适配器源码（**参考其行为，不抄其结构**——它们是 host 耦合的，你要写的是 host 无关版）：
+   - `/Users/maxesisn/maxclaw/src/llm/providers/anthropic.ts`
+   - `/Users/maxesisn/maxclaw/src/llm/providers/openai-completions.ts`
+   - `/Users/maxesisn/maxclaw/src/llm/providers/openai-responses.ts`
+   - `/Users/maxesisn/maxclaw/src/llm/types.ts`（IR 雏形）
+
+以下 corner case 是各 codec 的**最低覆盖线**，每条都必须有 conformance 语料（括号内是 MaxClaw 实证来源，可去读对应 commit/test）：
+
+**通用**
+- 流式组装：客户端必须自己从原始 SSE 事件重建缺失字段，不能依赖第三方 SDK 的 accumulate（SDK 不合并 message_delta 的 usage/stop_details 是实证 bug，MaxClaw `b9d2957`/`5b6757f`）
+- lone surrogate 安全：UTF-16 孤代理字符在 JSON.stringify/编码路径不得产生非法字节（MaxClaw `0be5344`，2026-07-13 ellyecode/grok-4.5 线上 500 实证）
+- tool_call 增量组装：`arguments` 空串起点的分片 append（MaxClaw `7d01269`）；JSON 完整即解析，不等多余 delta
+
+**Anthropic Messages**
+- tool_use input 三种兼容形态解析（A5，`anthropic.ts:1068-1103`）
+- 相邻 user 合并（A3，`anthropic.ts:547-558`）
+- usage 非标准位置回填：message_start 全 0 占位 + message_delta 真值（GLM-5.2/ark 实证，B2）
+- thinking 流式：signature_delta 排序在 thinking_delta 之后的乱序处理（MaxClaw `b21891c`）；thinking 回放的 interleaved 约束（MaxClaw `76da9c6`/`05b3374`）
+- 严格 proxy 的 minimal mode（去掉 proxy 不认的字段，`4762ab3`/`3578aa8`）
+- refusal：HTTP 200 ≠ 成功，stop_reason 驱动错误分类，partial 文本丢弃（J1，`ca11797`）
+
+**OpenAI Chat Completions**
+- content:null（I3）、tool_call_id 缺失降级（A2）
+- reasoning_content 字段无标准形态，当前策略：不支持即丢弃并记录，不臆造映射
+
+**OpenAI Responses**
+- 系统提示双模式：`instructions` 顶层字段 vs `input[0]{role:'developer'/'system'}`，代理兼容性优先（A6，`openai-responses.ts:837-857`）
+- reasoning item 回放 + encrypted_content（🔬 待实测验证，验证结果写回语料）
+- function_call_output 支持 image block 数组
+- thought_signature 类非标准字段必须回传，不得丢弃（C5）
+
+**Gemini schema（经 Completions 兼容层）**
+- 嵌套 object 无 properties、type 数组、`$ref`/anyOf 等负例集（C6，`baa9b9d`/`2d41004`/`28c08a4`/`e27c93e`）
+
+## 6. Capability 矩阵与降级策略
+
+**Capability 声明**（provider 维度，由 host 配置注入，codec 消费）：
+
+```ts
+interface ProviderCapability {
+  vision: boolean
+  document: 'native' | 'degrade' | 'unsupported'
+  toolCalls: boolean
+  thinking: 'native' | 'disabled-param' | 'unsupported'
+  streaming: boolean
+  hostedTools?: string[]  // 该端点支持的 server-side tool 类型
+}
+```
+
+**降级策略格**（I7 的展开，document 是典型）：
+
+- `document: 'native'` → document block 直发
+- `document: 'degrade'` → 按优先级尝试：(1) 逐页转 image（vision=true 且内容版式敏感时优先）；(2) 提取纯文本注入。降级路径必须显式记录（哪种降级、为什么），host 可读
+- `document: 'unsupported'` 且无法降级 → **fail-loud**，报出"该 provider 不支持 document"，绝不静默裸发
+- `vision: false` → 请求侧过滤所有 image block + 记录（GLM-5.2 400 实证）
+- capability 声明缺失的字段 → 按最保守值处理（fail-closed）
+
+## 7. Conformance 语料
+
+- **纯数据**：一个 case 一个 JSON 文件，零代码。格式：输入（IR 消息序列或录制的 SSE 事件流）+ capability → 期望输出（编码结果 / 解码结果 / 校验错误 / 降级决策）
+- **命名**：`<类别>-<序号>-<短语>.json`，类别沿用 §5 的分类（structure/stream/toolcall/thinking/usage/compat/refusal/empty/degrade）
+- **种子来源**（M2 起逐类转化）：protocol-survey.md 的 Part B 清单 + MaxClaw `*.test.ts` 里的编码断言 + 生产日志锚点（lone surrogate 500、GLM usage 0/0、max_tokens 截断、refusal 记录——把真实错误响应录制成 fixture）
+- **去标识纪律**：语料中禁止出现内部域名、IP、路径、账号、内部 provider 命名。统一用 `endpoint-a`/`provider-x` 式通用名。这是公开发布的红线（§9 hook 会拦，但第一责任人是写语料的你）
+- 数量预期：M5 完成时 ≥40 条，其中流式录制类 ≥10 条
+
+## 8. 里程碑与完成判定（DoD）
+
+> 顺序即依赖序。每个里程碑完成后 commit。任何里程碑发现更早产物有缺陷 → 回改，见 R1。
+
+**M0 — spec 与骨架**
+- SPEC.md v0.1：完整覆盖 §3 模型 + §4 全部 11 条不变量 + §6 capability schema。每条不变量写明正反例
+- 仓库结构按 §2 搭好，TS strict + lint + 测试框架跑通空套件
+- pre-push hook（§9）就位
+- DoD：SPEC.md 中每条不变量能指出对应反例；`bun test`（或 vitest）绿
+
+**M1 — IR 类型 + 校验器**
+- `types.ts` + `validate.ts`：§3 全部 block 类型 + I1/I2/I4/I5/I6 的可执行检查
+- DoD：I1/I2/I4/I5/I6 各自的验收语料（每类正反 ≥2 条）全绿
+
+**M2 — anthropic-messages codec + 语料 runner**
+- codec 覆盖 §5 Anthropic 最低覆盖线全部条目
+- conformance runner 成型，Anthropic 类语料 ≥12 条（含 ≥3 条流式录制）
+- DoD：语料全绿；§5 Anthropic 清单逐条能指出对应语料文件
+
+**M3 — openai-chat-completions codec**
+- 覆盖 §5 Completions 清单 + Gemini schema 负例集
+- DoD：新增语料 ≥8 条全绿；I3/I9 验收通过
+
+**M4 — openai-responses codec + capability 矩阵**
+- 覆盖 §5 Responses 清单；capability 矩阵接入三个 codec 的编码入口（encode 签名从本里程碑起统一为 `encode(messages, capability)`——注意：这意味着 M2/M3 的 codec 签名要在这里回改一次，这是预期内成本，不是返工事故）
+- document 降级格可执行（转 image 用真实 PDF fixture；文本提取可用占位实现但接口必须是真的）
+- DoD：I7 验收通过；降级决策语料 ≥4 条
+
+**M5 — 退化检测 + 诊断 + 发布准备**
+- I10 五类退化检测器 + I11 请求落盘
+- README（一句话宣称 + 最小接入示例，示例代码必须真的能跑）
+- 语料总数 ≥40
+- DoD：§4 全部 11 条验收逐项核对通过；tag v0.1.0（tag 动作前需项目 owner 确认）
+
+## 9. Pre-push hook（公开发布防线）
+
+M0 就位，拦截以下模式的任何文件内容：
+
+- 内部域名（`maxng.cc`）、内网 IP 段（`10.x`/`192.168.x` 出现于非示例上下文）
+- 本机绝对路径（`/Users/maxesisn`）
+- 密钥模式（常见 API key/token 正则）
+- 内部命名：MaxClaw 内部 provider id、channel/session id、telegram id 等
+- `keys.env` / `.env` 文件名引用
+
+hook 本身随仓库公开维护。被拦时不允许绕过（`--no-verify` 视为事故）。
+
+**已知例外与处理**：§5 引用的 MaxClaw 本机路径（`/Users/maxesisn/maxclaw/...`）是 bootstrap 脚手架——初版实现期需要它们去读实证材料，但它们不可能通过本 hook。处理规则：这些引用只允许存在于 AGENTS.md；**首次公开 push 前**，要么语料已转化完成、§5 改写为指向仓库内语料的通用描述，要么把实证材料去标识后 vendor 进仓库。M5 的 DoD 隐含包含此项：v0.1.0 tag 前仓库必须能整体通过 §9 检查。
+
+## 10. 工作方式
+
+- 所有注释、commit message、文档：中文（SPEC.md/README 的对外语言由项目 owner 另行决定，初版中文即可）
+- 每个里程碑一个 commit 或一组小 commit，message 写清"为什么"而不只是"做了什么"
+- 遇到 §5 标注 🔬（待实测验证）的条目：设计实验实测，把结果写成语料，并在 SPEC.md 把该条从"待验证"改为实证结论。**禁止**把 🔬 条目当已验证知识直接编码
+- 你不拥有需求决策权。发现本文件与现实矛盾、或认为某条规则错了：停下来，在回复中明确提出，等 owner 裁决。不要静默绕过
