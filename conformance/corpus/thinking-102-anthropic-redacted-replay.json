@@ -1,0 +1,76 @@
+{
+  "name": "Anthropic redacted_thinking 同 provider 原样回放",
+  "category": "thinking",
+  "operation": "anthropic-encode",
+  "invariants": [
+    "I6"
+  ],
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key",
+      "capability": {
+        "thinkingReplay": "replay"
+      }
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "q"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "redacted_thinking",
+            "data": "enc_payload",
+            "providerId": "provider-x"
+          },
+          {
+            "type": "text",
+            "text": "a"
+          }
+        ]
+      }
+    ],
+    "options": {
+      "maxOutputTokens": 1024
+    }
+  },
+  "expected": {
+    "model": "model-a",
+    "max_tokens": 1024,
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "text",
+            "text": "q"
+          }
+        ]
+      },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "redacted_thinking",
+            "data": "enc_payload"
+          },
+          {
+            "type": "text",
+            "text": "a"
+          }
+        ]
+      }
+    ],
+    "stream": true
+  }
+}

@@ -21,6 +21,15 @@ export interface ThinkingBlock {
   providerId: string
 }
 
+/** Anthropic redacted_thinking：服务端加密的不透明思考块。同 provider 原样回放，
+ *  跨 provider 丢弃（I6）。IR 一等 block——不得以 provider_blocks 打包承载，
+ *  避免被 verbatim 快车道误判为整条 assistant 的替身。 */
+export interface RedactedThinkingBlock {
+  type: 'redacted_thinking'
+  data: string
+  providerId: string
+}
+
 export interface ToolCallBlock {
   type: 'tool_call'
   id: string
@@ -71,6 +80,7 @@ export type UserBlock = TextBlock | ImageBlock | DocumentBlock
 export type AssistantBlock =
   | TextBlock
   | ThinkingBlock
+  | RedactedThinkingBlock
   | ToolCallBlock
   | RefusalBlock
   | ProviderBlocksBlock

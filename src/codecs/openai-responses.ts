@@ -377,6 +377,8 @@ function encodeInput(
             reason: 'Responses reasoning 回放需要同 provider 的原生 encrypted_content',
           })
           break
+        case 'redacted_thinking':
+          break // Anthropic 私有形态，Responses 不回放
         case 'provider_blocks':
           degradations.push({
             blockType: 'provider_blocks',

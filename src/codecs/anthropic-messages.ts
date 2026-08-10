@@ -585,6 +585,19 @@ function encodeMessage(
         if (encoded !== null) content.push(encoded)
         break
       }
+      case 'redacted_thinking': {
+        if (block.providerId !== providerId) break // I6：跨 provider 丢弃
+        if (replay === 'drop') {
+          degradations.push({
+            blockType: 'thinking',
+            action: 'filtered',
+            reason: '目标 provider 的 thinkingReplay capability 为 drop',
+          })
+          break
+        }
+        content.push({ type: 'redacted_thinking', data: block.data })
+        break
+      }
       case 'tool_call':
         content.push(encodeToolCall(block))
         break
@@ -938,6 +951,13 @@ function decodeContentBlocks(
         break
       }
       case 'redacted_thinking':
+        if (typeof value.data === 'string') {
+          normalized.push({
+            type: 'redacted_thinking',
+            data: value.data,
+            providerId,
+          })
+        }
         break
     }
     raw.push(asJsonValue(rawValue, `response.content[${blockIndex}]`))

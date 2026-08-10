@@ -411,6 +411,12 @@ function encodeMessages(
             detail: `Chat Completions 不回放 thinking block (${block.providerId})`,
           })
           break
+        case 'redacted_thinking':
+          notices.push({
+            code: 'discarded_thinking_block',
+            detail: `Chat Completions 不回放 redacted_thinking block (${block.providerId})`,
+          })
+          break
         case 'provider_blocks':
           notices.push({
             code: 'discarded_provider_blocks',

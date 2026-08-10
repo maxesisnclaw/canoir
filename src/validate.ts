@@ -33,6 +33,7 @@ const allowedBlocksByRole: Record<Role, ReadonlySet<string>> = {
   assistant: new Set([
     'text',
     'thinking',
+    'redacted_thinking',
     'tool_call',
     'refusal',
     'provider_blocks',
@@ -237,6 +238,25 @@ function validateBlockSchema(
           'text block 必须包含字符串 text',
         )
       }
+      break
+    case 'redacted_thinking':
+      if (typeof block.data !== 'string' || block.data.length === 0) {
+        addIssue(
+          issues,
+          'IR',
+          'invalid_redacted_thinking',
+          messageIndex,
+          blockIndex,
+          'redacted_thinking.data 必须是非空字符串',
+        )
+      }
+      validateProviderBinding(
+        block,
+        options,
+        issues,
+        messageIndex,
+        blockIndex,
+      )
       break
     case 'thinking':
       if (typeof block.thinking !== 'string') {
