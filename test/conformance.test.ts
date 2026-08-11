@@ -93,6 +93,23 @@ describe('conformance runner', () => {
     ).toBe(true)
   })
 
+  test('M8 识别、三类降级、自限重试与 TTL 恢复均有语料', () => {
+    const adaptationCases = cases.filter(
+      (item) => item.category === 'adaptation',
+    )
+    expect(adaptationCases.length).toBeGreaterThanOrEqual(5)
+    const corpus = JSON.stringify(adaptationCases.map((item) => item.expected))
+    for (const marker of [
+      'document-to-images',
+      '图片已因目标端点拒绝而移除',
+      'thinking-param-removed',
+      'first opaque error',
+      'rejectedAfterExpiry',
+    ]) {
+      expect(corpus).toContain(marker)
+    }
+  })
+
   for (const item of cases) {
     test(item.name, async () => {
       const result = await runConformanceCase(item)

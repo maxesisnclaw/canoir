@@ -1,0 +1,103 @@
+{
+  "name": "运行时 document 拒绝后降级为页面图片重试",
+  "category": "adaptation",
+  "operation": "responses-call-adaptive",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "signatures": [
+      {
+        "id": "document-rejected",
+        "capability": "document",
+        "rejection": { "status": 400, "bodyMatch": "document rejected" },
+        "recovery": "degrade-document",
+        "observedAt": "2026-08-11",
+        "evidence": ["合成拒绝响应"]
+      }
+    ],
+    "httpResponses": [
+      { "status": 400, "body": "document rejected" },
+      { "status": 200, "kind": "success" }
+    ],
+    "documentConversion": {
+      "text": "document text",
+      "images": [
+        {
+          "type": "image",
+          "source": {
+            "type": "base64",
+            "mediaType": "image/png",
+            "data": "cGFnZQ=="
+          }
+        }
+      ]
+    },
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "document",
+            "source": {
+              "type": "base64",
+              "mediaType": "application/pdf",
+              "data": "JVBERi0xLjQKJUVPRgo="
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "requestBodies": [
+      {
+        "model": "model-a",
+        "store": false,
+        "stream": true,
+        "input": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "input_file",
+                "filename": "document",
+                "file_data": "data:application/pdf;base64,JVBERi0xLjQKJUVPRgo="
+              }
+            ]
+          }
+        ],
+        "include": ["reasoning.encrypted_content"]
+      },
+      {
+        "model": "model-a",
+        "store": false,
+        "stream": true,
+        "input": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "input_image",
+                "image_url": "data:image/png;base64,cGFnZQ=="
+              }
+            ]
+          }
+        ],
+        "include": ["reasoning.encrypted_content"]
+      }
+    ],
+    "retried": true,
+    "degradations": [
+      {
+        "blockType": "document",
+        "action": "document-to-images",
+        "reason": "目标 provider 不原生支持 document，按版式优先转换为图片"
+      }
+    ]
+  }
+}

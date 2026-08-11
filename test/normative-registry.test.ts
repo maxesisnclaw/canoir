@@ -51,8 +51,16 @@ describe('M6 normative registry', () => {
         expect(sourceIds.has(rule.source)).toBe(true)
         expect(rule.anchor.length).toBeGreaterThan(0)
       } else if (rule.basis === 'deviation') {
-        expect(rule.condition.length).toBeGreaterThan(0)
-        expect(rule.testedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+        if ('rejection' in rule) {
+          expect(rule.observedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+          expect(
+            rule.rejection.bodyMatch !== undefined ||
+              rule.rejection.errorCode !== undefined,
+          ).toBe(true)
+        } else {
+          expect(rule.condition.length).toBeGreaterThan(0)
+          expect(rule.testedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+        }
         expect(rule.evidence.length).toBeGreaterThan(0)
       } else if (rule.basis === 'extension') {
         expect(rule.note.length).toBeGreaterThan(0)

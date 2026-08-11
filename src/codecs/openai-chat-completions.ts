@@ -27,6 +27,14 @@ import type {
   Usage,
 } from '../types'
 import { validateMessages } from '../validate'
+import {
+  capabilityAfterRuntimeRejections,
+  optionsAfterRuntimeRejections,
+  thinkingParamRemovedDegradation,
+  usedRuntimeCapabilities,
+  type AdaptiveCallResult,
+  type RuntimeCapabilityAdapter,
+} from '../adaptation'
 
 export type OpenAIToolSchemaDialect = 'json-schema' | 'gemini-openapi'
 
@@ -709,11 +717,10 @@ export class OpenAIChatCompletionsCodec {
     return decodeOpenAIChatResponse(response, this.config.providerId, degradation)
   }
 
-  async call(
-    messages: readonly Message[],
-    options: OpenAIChatEncodeOptions = {},
+  private async callEncoded(
+    request: OpenAIChatEncodedRequest,
+    options: OpenAIChatEncodeOptions,
   ): Promise<OpenAIChatDecodedResponse> {
-    const request = this.encode(messages, options)
     await writeRequestDiagnostic(options.diagnosticWriter, {
       method: 'POST',
       url: request.url,
@@ -735,5 +742,67 @@ export class OpenAIChatCompletionsCodec {
       ...decoded,
       notices: [...request.notices, ...decoded.notices],
     }
+  }
+
+  async call(
+    messages: readonly Message[],
+    options: OpenAIChatEncodeOptions = {},
+  ): Promise<OpenAIChatDecodedResponse> {
+    const request = this.encode(messages, options)
+    return this.callEncoded(request, options)
+  }
+
+  async callAdaptive(
+    adapter: RuntimeCapabilityAdapter,
+    messages: readonly Message[],
+    options: OpenAIChatEncodeOptions = {},
+  ): Promise<AdaptiveCallResult<OpenAIChatDecodedResponse>> {
+    return adapter.execute({
+      endpoint: this.config.endpoint,
+      model: cleanWireModelId(this.config.model),
+      usedCapabilities: (rejected) => {
+        const capability = capabilityAfterRuntimeRejections(
+          this.capability,
+          rejected,
+        )
+        const adaptedOptions = optionsAfterRuntimeRejections(options, rejected)
+        return usedRuntimeCapabilities(
+          messages,
+          capability,
+          adaptedOptions,
+          options.reasoningEffort !== undefined,
+        )
+      },
+      attempt: async (rejected) => {
+        const capability = capabilityAfterRuntimeRejections(
+          this.capability,
+          rejected,
+        )
+        const adaptedOptions = optionsAfterRuntimeRejections(options, rejected)
+        const { reasoningEffort: _reasoningEffort, ...withoutReasoning } =
+          adaptedOptions
+        const attemptOptions: OpenAIChatEncodeOptions = rejected.has(
+          'thinking-param',
+        )
+          ? withoutReasoning
+          : adaptedOptions
+        const request = encodeOpenAIChatRequest(
+          { ...this.config, capability },
+          messages,
+          attemptOptions,
+        )
+        const degradations = [...request.degradations]
+        if (
+          rejected.has('thinking-param') &&
+          options.reasoningEffort !== undefined
+        ) {
+          degradations.push(thinkingParamRemovedDegradation())
+        }
+        return {
+          value: await this.callEncoded(request, attemptOptions),
+          degradations,
+        }
+      },
+    })
   }
 }

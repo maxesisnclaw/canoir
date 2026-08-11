@@ -1,0 +1,14 @@
+{
+  "name": "负面记忆 TTL 到期后恢复富形态",
+  "category": "adaptation",
+  "operation": "adaptation-memory-expiry",
+  "recorded": false,
+  "input": {
+    "ttlMs": 100,
+    "expiredAt": 101
+  },
+  "expected": {
+    "rejectedBeforeExpiry": true,
+    "rejectedAfterExpiry": false
+  }
+}

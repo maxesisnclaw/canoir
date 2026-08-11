@@ -1,0 +1,75 @@
+{
+  "name": "运行时 thinking 参数拒绝后移除参数重试",
+  "category": "adaptation",
+  "operation": "responses-call-adaptive",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "signatures": [
+      {
+        "id": "thinking-param-rejected",
+        "capability": "thinking-param",
+        "rejection": { "status": 400, "errorCode": "unsupported_parameter" },
+        "recovery": "remove-thinking-param",
+        "observedAt": "2026-08-11",
+        "evidence": ["合成拒绝响应"]
+      }
+    ],
+    "httpResponses": [
+      {
+        "status": 400,
+        "body": "{\"error\":{\"code\":\"unsupported_parameter\"}}"
+      },
+      { "status": 200, "kind": "success" }
+    ],
+    "options": { "reasoningEffort": "high" },
+    "messages": [
+      {
+        "role": "user",
+        "content": [{ "type": "text", "text": "hello" }]
+      }
+    ]
+  },
+  "expected": {
+    "requestBodies": [
+      {
+        "model": "model-a",
+        "store": false,
+        "stream": true,
+        "input": [
+          {
+            "role": "user",
+            "content": [{ "type": "input_text", "text": "hello" }]
+          }
+        ],
+        "include": ["reasoning.encrypted_content"],
+        "reasoning": { "effort": "high", "summary": "auto" }
+      },
+      {
+        "model": "model-a",
+        "store": false,
+        "stream": true,
+        "input": [
+          {
+            "role": "user",
+            "content": [{ "type": "input_text", "text": "hello" }]
+          }
+        ],
+        "include": ["reasoning.encrypted_content"]
+      }
+    ],
+    "retried": true,
+    "degradations": [
+      {
+        "blockType": "thinking",
+        "action": "thinking-param-removed",
+        "reason": "目标端点已被运行时确认拒绝 thinking 参数，移除该参数"
+      }
+    ]
+  }
+}

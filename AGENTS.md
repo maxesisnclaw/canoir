@@ -6,7 +6,7 @@
 
 实现本项目的 agent 有三种已被预判的失败模式，对应三条硬规则：
 
-**R1 禁止子步骤蔓延。** §8 的 M0–M7 是唯一合法计划，顺序即依赖序。如果你在 M3 发现地基没打牢，**停下来修地基**——回改 M0–M2 的产物（通常是 SPEC.md 或类型定义），然后继续 M3。禁止创建 3.1/3.2 式子任务来绕过地基问题。发现 spec 缺陷的正确动作是改 spec，不是在代码里加变通层。
+**R1 禁止子步骤蔓延。** §8 的 M0–M8 是唯一合法计划，顺序即依赖序。如果你在 M3 发现地基没打牢，**停下来修地基**——回改 M0–M2 的产物（通常是 SPEC.md 或类型定义），然后继续 M3。禁止创建 3.1/3.2 式子任务来绕过地基问题。发现 spec 缺陷的正确动作是改 spec，不是在代码里加变通层。
 
 **R2 关键承载点不可偷工。** §4 每条不变量附有验收标准（具体测试形态）。里程碑完成判定的第一项就是逐条核对承载点验收——缺一项，该里程碑不算完成，无论代码看起来多完整。
 
@@ -34,6 +34,7 @@ canoir/
 │   ├── types.ts         # IR 消息模型（§3）
 │   ├── validate.ts      # 消息序列合法性校验器（§4 不变量的可执行形态）
 │   ├── capability.ts    # capability 矩阵 + 降级策略（§6）
+│   ├── adaptation.ts    # 运行时拒绝识别 + 一次降级重试 + 负面记忆
 │   └── codecs/
 │       ├── anthropic-messages.ts
 │       ├── openai-chat-completions.ts
@@ -160,10 +161,10 @@ interface ProviderCapability {
 ## 7. Conformance 语料
 
 - **纯数据**：一个 case 一个 JSON 文件，零代码。格式：输入（IR 消息序列或录制的 SSE 事件流）+ capability → 期望输出（编码结果 / 解码结果 / 校验错误 / 降级决策）
-- **命名**：`<类别>-<序号>-<短语>.json`，类别沿用 §5 的分类（structure/stream/toolcall/thinking/usage/cache/compat/refusal/empty/degrade）
+- **命名**：`<类别>-<序号>-<短语>.json`，类别沿用 §5 的分类（structure/stream/toolcall/thinking/usage/cache/compat/refusal/empty/degrade/adaptation）
 - **种子来源**（M2 起逐类转化）：protocol-survey.md 的 Part B 清单 + 宿主项目 `*.test.ts` 里的编码断言 + 生产日志锚点（lone surrogate 500、GLM usage 0/0、max_tokens 截断、refusal 记录——把真实错误响应录制成 fixture）
 - **去标识纪律**：语料中禁止出现内部域名、IP、路径、账号、内部 provider 命名。统一用 `endpoint-a`/`provider-x` 式通用名。这是公开发布的红线（§9 hook 会拦，但第一责任人是写语料的你）
-- **依据登记**：每个 corpus 文件必须且只能在 `normative/registry.json` 中登记一次。`official` 规则引用固定 source 与 anchor；`deviation` 规则必须写明 condition、testedAt 与 evidence；`canoir` 规则必须写明 rationale。禁止新增未登记语料或用默认规则隐式继承依据
+- **依据登记**：每个 corpus 文件必须且只能在 `normative/registry.json` 中登记一次。`official` 规则引用固定 source 与 anchor；叙述型 `deviation` 写明 condition、testedAt 与 evidence，可运行拒绝签名写明 capability、rejection、recovery、observedAt 与 evidence；`canoir` 规则必须写明 rationale。禁止新增未登记语料或用默认规则隐式继承依据
 - **机械校验**：成功 encode case 必须通过固定官方 request type，或显式登记为实测偏差。官方 SDK 只作为 devDependency，不得进入运行时依赖
 - 数量预期：M5 完成时 ≥40 条，其中流式录制类 ≥10 条
 
@@ -207,7 +208,7 @@ interface ProviderCapability {
 - 成功 encode case 用固定官方 request type 做机械校验；官方 SDK 仅作开发期校验，运行时继续零依赖
 - CI 使用 lockfile 安装依赖并运行完整 `bun run check`
 - SPEC 按 vendor 分开写官方规范与实测偏差，明确未登记的规范冲突一律视为 bug
-- DoD：registry 全覆盖且无重复；全部适用 encode body 通过官方类型校验；每条偏差具备 condition、testedAt、evidence；完整检查与公开扫描通过
+- DoD：registry 全覆盖且无重复；全部适用 encode body 通过官方类型校验；每条偏差具备对应形态所需的时间与 evidence；完整检查与公开扫描通过
 
 **M7 — 缓存计量分解与 encode 期 hint**
 - IR `Usage` 增加可选 cache read、cache creation 与 reasoning token 分解；三家 codec 各自映射原生 usage，缺失字段不填 0
@@ -216,6 +217,13 @@ interface ProviderCapability {
 - Anthropic 把 system/tools/history/message 锚点翻译为 block 级 `cache_control`；无 hint 不隐式添加 marker，实际 breakpoint 超过 4 时 fail-loud
 - automatic/none 端点忽略合法 hint 并记录，这是唯一允许静默降级的 capability 类别
 - DoD：usage 分解每 codec 至少一条语料；cache marker、合并后 message 边界、automatic 忽略、越界与 breakpoint 上限语料全绿；官方 schema、完整检查与公开扫描通过
+
+**M8 — 运行时能力适应层**
+- registry 支持把有可靠 HTTP 证据的 deviation 表达为 capability 拒绝签名；无法形成稳定 status/body/error code 的条目保留叙述形态，不硬凑
+- `RuntimeCapabilityAdapter` 只在“请求实际使用 capability X”且响应匹配 X 的拒绝签名时触发一次降级重试；重试仍失败时抛第一次原始错误
+- v1 recovery 固定为 document 转页面图片再退纯文本、image 剥离并注入文本说明、thinking 控制参数移除；全部沿用 degradation 记录通道
+- `(endpoint, model, capability)` 负面记忆默认 TTL 24h，仅记拒绝、到期删除、进程内保存；不做 profile、probe、能力升级跟踪或持久化
+- DoD：识别匹配、模糊误判自限、三类 recovery、TTL 到期恢复富形态语料全绿；现有 deviation 逐条审计，不能可靠改写的在对应 issue 说明
 
 ## 9. Pre-push hook（公开发布防线）
 

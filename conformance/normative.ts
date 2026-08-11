@@ -1,4 +1,9 @@
 import { readFileSync } from 'node:fs'
+import type {
+  RecoveryAction,
+  RejectionSignature,
+  RuntimeCapability,
+} from '../src/adaptation'
 
 export type OfficialSchema = 'anthropic' | 'openai-chat' | 'responses'
 
@@ -29,6 +34,17 @@ export type NormativeRule =
       basis: 'deviation'
       condition: string
       testedAt: string
+      evidence: string[]
+      schema?: OfficialSchema
+      cases: string[]
+    }
+  | {
+      id: string
+      basis: 'deviation'
+      capability: RuntimeCapability
+      rejection: RejectionSignature['rejection']
+      recovery: RecoveryAction
+      observedAt: string
       evidence: string[]
       schema?: OfficialSchema
       cases: string[]
@@ -77,4 +93,23 @@ export function rulesByCase(registry: NormativeRegistry): Map<string, NormativeR
     }
   }
   return result
+}
+
+export function runtimeRejectionSignatures(
+  registry: NormativeRegistry,
+): RejectionSignature[] {
+  return registry.rules.flatMap((rule) =>
+    rule.basis === 'deviation' && 'rejection' in rule
+      ? [
+          {
+            id: rule.id,
+            capability: rule.capability,
+            rejection: { ...rule.rejection },
+            recovery: rule.recovery,
+            observedAt: rule.observedAt,
+            evidence: [...rule.evidence],
+          },
+        ]
+      : [],
+  )
 }

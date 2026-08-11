@@ -14,6 +14,14 @@ import type {
   Usage,
 } from '../types'
 import {
+  capabilityAfterRuntimeRejections,
+  optionsAfterRuntimeRejections,
+  thinkingParamRemovedDegradation,
+  usedRuntimeCapabilities,
+  type AdaptiveCallResult,
+  type RuntimeCapabilityAdapter,
+} from '../adaptation'
+import {
   applyCapability,
   CapabilityError,
   normalizeCapability,
@@ -1338,25 +1346,10 @@ export class AnthropicMessagesCodec {
     )
   }
 
-  decode(
-    response: unknown,
-    degradation: ResponseDegradationOptions = {},
-  ): AnthropicDecodedResponse {
-    return decodeAnthropicResponse(response, this.config.providerId, undefined, undefined, degradation)
-  }
-
-  decodeStream(
-    events: readonly AnthropicSseEvent[],
-    degradation: ResponseDegradationOptions = {},
-  ): AnthropicDecodedResponse {
-    return assembleAnthropicSse(events, this.config.providerId, degradation)
-  }
-
-  async call(
-    messages: readonly Message[],
-    options: AnthropicEncodeOptions = {},
+  private async callEncoded(
+    request: AnthropicEncodedRequest,
+    options: AnthropicEncodeOptions,
   ): Promise<AnthropicDecodedResponse> {
-    const request = this.encode(messages, options)
     await writeRequestDiagnostic(options.diagnosticWriter, {
       method: 'POST',
       url: request.url,
@@ -1396,6 +1389,78 @@ export class AnthropicMessagesCodec {
       ...(options.thinking?.type === 'enabled'
         ? { thinkingTokenBudget: options.thinking.budgetTokens }
         : {}),
+    })
+  }
+
+  decode(
+    response: unknown,
+    degradation: ResponseDegradationOptions = {},
+  ): AnthropicDecodedResponse {
+    return decodeAnthropicResponse(response, this.config.providerId, undefined, undefined, degradation)
+  }
+
+  decodeStream(
+    events: readonly AnthropicSseEvent[],
+    degradation: ResponseDegradationOptions = {},
+  ): AnthropicDecodedResponse {
+    return assembleAnthropicSse(events, this.config.providerId, degradation)
+  }
+
+  async call(
+    messages: readonly Message[],
+    options: AnthropicEncodeOptions = {},
+  ): Promise<AnthropicDecodedResponse> {
+    const request = this.encode(messages, options)
+    return this.callEncoded(request, options)
+  }
+
+  async callAdaptive(
+    adapter: RuntimeCapabilityAdapter,
+    messages: readonly Message[],
+    options: AnthropicEncodeOptions = {},
+  ): Promise<AdaptiveCallResult<AnthropicDecodedResponse>> {
+    return adapter.execute({
+      endpoint: this.config.endpoint,
+      model: cleanWireModelId(this.config.model),
+      usedCapabilities: (rejected) => {
+        const capability = capabilityAfterRuntimeRejections(
+          this.capability,
+          rejected,
+        )
+        const adaptedOptions = optionsAfterRuntimeRejections(options, rejected)
+        return usedRuntimeCapabilities(
+          messages,
+          capability,
+          adaptedOptions,
+          options.thinking !== undefined,
+        )
+      },
+      attempt: async (rejected) => {
+        const capability = capabilityAfterRuntimeRejections(
+          this.capability,
+          rejected,
+        )
+        const adaptedOptions = optionsAfterRuntimeRejections(options, rejected)
+        const { thinking: _thinking, ...withoutThinking } = adaptedOptions
+        const attemptOptions: AnthropicEncodeOptions = rejected.has(
+          'thinking-param',
+        )
+          ? withoutThinking
+          : adaptedOptions
+        const request = encodeAnthropicRequest(
+          { ...this.config, capability },
+          messages,
+          attemptOptions,
+        )
+        const degradations = [...request.degradations]
+        if (rejected.has('thinking-param') && options.thinking !== undefined) {
+          degradations.push(thinkingParamRemovedDegradation())
+        }
+        return {
+          value: await this.callEncoded(request, attemptOptions),
+          degradations,
+        }
+      },
     })
   }
 }

@@ -30,6 +30,14 @@ import type {
   Usage,
 } from '../types'
 import { validateMessages } from '../validate'
+import {
+  capabilityAfterRuntimeRejections,
+  optionsAfterRuntimeRejections,
+  thinkingParamRemovedDegradation,
+  usedRuntimeCapabilities,
+  type AdaptiveCallResult,
+  type RuntimeCapabilityAdapter,
+} from '../adaptation'
 
 export interface OpenAIResponsesCodecConfig {
   providerId: string
@@ -945,11 +953,10 @@ export class OpenAIResponsesCodec {
     return assembleOpenAIResponsesSse(events, this.config.providerId, degradation)
   }
 
-  async call(
-    messages: readonly Message[],
-    options: OpenAIResponsesEncodeOptions = {},
+  private async callEncoded(
+    request: OpenAIResponsesEncodedRequest,
+    options: OpenAIResponsesEncodeOptions,
   ): Promise<OpenAIResponsesDecodedResponse> {
-    const request = this.encode(messages, options)
     await writeRequestDiagnostic(options.diagnosticWriter, {
       method: 'POST',
       url: request.url,
@@ -976,5 +983,67 @@ export class OpenAIResponsesCodec {
       parseOpenAIResponsesSse(await response.text()),
       options.degradation,
     )
+  }
+
+  async call(
+    messages: readonly Message[],
+    options: OpenAIResponsesEncodeOptions = {},
+  ): Promise<OpenAIResponsesDecodedResponse> {
+    const request = this.encode(messages, options)
+    return this.callEncoded(request, options)
+  }
+
+  async callAdaptive(
+    adapter: RuntimeCapabilityAdapter,
+    messages: readonly Message[],
+    options: OpenAIResponsesEncodeOptions = {},
+  ): Promise<AdaptiveCallResult<OpenAIResponsesDecodedResponse>> {
+    return adapter.execute({
+      endpoint: this.config.endpoint,
+      model: cleanWireModelId(this.config.model),
+      usedCapabilities: (rejected) => {
+        const capability = capabilityAfterRuntimeRejections(
+          this.capability,
+          rejected,
+        )
+        const adaptedOptions = optionsAfterRuntimeRejections(options, rejected)
+        return usedRuntimeCapabilities(
+          messages,
+          capability,
+          adaptedOptions,
+          options.reasoningEffort !== undefined,
+        )
+      },
+      attempt: async (rejected) => {
+        const capability = capabilityAfterRuntimeRejections(
+          this.capability,
+          rejected,
+        )
+        const adaptedOptions = optionsAfterRuntimeRejections(options, rejected)
+        const { reasoningEffort: _reasoningEffort, ...withoutReasoning } =
+          adaptedOptions
+        const attemptOptions: OpenAIResponsesEncodeOptions = rejected.has(
+          'thinking-param',
+        )
+          ? withoutReasoning
+          : adaptedOptions
+        const request = encodeOpenAIResponsesRequest(
+          { ...this.config, capability },
+          messages,
+          attemptOptions,
+        )
+        const degradations = [...request.degradations]
+        if (
+          rejected.has('thinking-param') &&
+          options.reasoningEffort !== undefined
+        ) {
+          degradations.push(thinkingParamRemovedDegradation())
+        }
+        return {
+          value: await this.callEncoded(request, attemptOptions),
+          degradations,
+        }
+      },
+    })
   }
 }

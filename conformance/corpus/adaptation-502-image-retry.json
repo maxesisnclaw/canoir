@@ -1,0 +1,89 @@
+{
+  "name": "运行时 image 拒绝后剥离并写入文本注记",
+  "category": "adaptation",
+  "operation": "responses-call-adaptive",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "signatures": [
+      {
+        "id": "image-rejected",
+        "capability": "image",
+        "rejection": { "status": 400, "bodyMatch": "image rejected" },
+        "recovery": "strip-image",
+        "observedAt": "2026-08-11",
+        "evidence": ["合成拒绝响应"]
+      }
+    ],
+    "httpResponses": [
+      { "status": 400, "body": "image rejected" },
+      { "status": 200, "kind": "success" }
+    ],
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "image",
+            "source": {
+              "type": "base64",
+              "mediaType": "image/png",
+              "data": "cGl4ZWw="
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "expected": {
+    "requestBodies": [
+      {
+        "model": "model-a",
+        "store": false,
+        "stream": true,
+        "input": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "input_image",
+                "image_url": "data:image/png;base64,cGl4ZWw="
+              }
+            ]
+          }
+        ],
+        "include": ["reasoning.encrypted_content"]
+      },
+      {
+        "model": "model-a",
+        "store": false,
+        "stream": true,
+        "input": [
+          {
+            "role": "user",
+            "content": [
+              {
+                "type": "input_text",
+                "text": "[图片已因目标端点拒绝而移除]"
+              }
+            ]
+          }
+        ],
+        "include": ["reasoning.encrypted_content"]
+      }
+    ],
+    "retried": true,
+    "degradations": [
+      {
+        "blockType": "image",
+        "action": "filtered",
+        "reason": "目标 provider 的 vision capability 为 false"
+      }
+    ]
+  }
+}

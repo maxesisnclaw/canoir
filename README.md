@@ -1,6 +1,6 @@
 # CanoIR
 
-多 LLM API 的协议中间层：统一消息模型（Canonical IR）、三家 API 编解码（Anthropic Messages / OpenAI Chat Completions / OpenAI Responses）、provider 能力协商与降级、缓存计量分解与 encode 期 cache hint、conformance 语料。供 agent harness 作为中间组件接入。
+多 LLM API 的协议中间层：统一消息模型（Canonical IR）、三家 API 编解码（Anthropic Messages / OpenAI Chat Completions / OpenAI Responses）、provider 能力协商与运行时拒绝适应、缓存计量分解与 encode 期 cache hint、conformance 语料。供 agent harness 作为中间组件接入。
 
 A protocol middle layer for multi-LLM-API agent harnesses: canonical message IR, codecs, capability negotiation, and a conformance corpus.
 
@@ -31,6 +31,8 @@ const request = codec.encode([
   { role: 'user', content: [{ type: 'text', text: 'Hello' }] },
 ])
 ```
+
+需要处理兼容端点的能力漂移时，调用方可从已审计的拒绝签名构造 `RuntimeCapabilityAdapter`，再使用 codec 的 `callAdaptive()`。它只在请求确实使用对应能力且 HTTP 错误命中签名时降级一次；短期负面记忆会避免同一 endpoint/model/capability 组合重复撞错。
 
 仓库内的可执行版本位于 `examples/minimal.ts`：
 

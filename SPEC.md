@@ -210,7 +210,7 @@ interface ProviderCapability {
 2. `replay`：provider 容忍原样回放；空 token thinking 也可回放。
 3. `drop`：回放时丢弃 thinking；未知端点默认使用该档。
 
-Capability 在 codec constructor 中固定。运行中实测发现端点能力与声明不符时，host 只能通过 `updateCapability()` 显式整体替换；`encode()` 与 `call()` 不接受 per-call capability override。
+Capability 在 codec constructor 中固定。Host 主动改变先验声明时只能通过 `updateCapability()` 显式整体替换；`encode()` 与 `call()` 不接受 per-call capability override。§3.5 的运行时适应是 CanoIR 对已观测拒绝的后验修正，不向 caller 暴露任意 capability override。
 
 `promptCaching` 描述请求侧缓存控制机制：
 
@@ -225,7 +225,7 @@ Capability 在 codec constructor 中固定。运行中实测发现端点能力�
 ```ts
 interface DegradationRecord {
   blockType: 'image' | 'document' | 'thinking' | 'provider_blocks' | 'prompt_cache'
-  action: 'filtered' | 'document-to-images' | 'document-to-text' | 'cache-hint-ignored'
+  action: 'filtered' | 'document-to-images' | 'document-to-text' | 'thinking-param-removed' | 'cache-hint-ignored'
   reason: string
 }
 ```
@@ -267,6 +267,41 @@ Anchors 是无序集合，重复值去重：
 `nthFromEnd` 非正整数、越界、锚点没有实际 wire target，或实际 breakpoint 数超过目标 API 上限时必须在编码前 fail-loud。Anthropic Messages 当前上限为 4 个实际 breakpoint；多个锚点落到同一 block 时只计一个。没有 hint 时不得隐式添加 marker。
 
 合法 hint 遇到 `automatic` 或 `none` capability 时，codec 保持请求语义与 wire body 不变，并记录 `prompt_cache/cache-hint-ignored`。这是唯一允许静默忽略并记录而不是 fail-loud 的 capability 降级：cache hint 只影响性能和计费，不改变模型可见内容或工具语义。
+
+### 3.5 运行时能力适应
+
+Capability 声明是先验；运行时适应只处理“声明支持、实际请求被端点拒绝”的后验反证。拒绝签名形态为：
+
+```ts
+interface RejectionSignature {
+  id: string
+  capability: 'document' | 'image' | 'thinking-param'
+  rejection: { status: number; bodyMatch?: string; errorCode?: string }
+  recovery: 'degrade-document' | 'strip-image' | 'remove-thinking-param'
+  observedAt: string
+  evidence: string[]
+}
+```
+
+`bodyMatch` 是响应 body 的子串匹配；`errorCode` 从顶层 `code` 或 `error.code` 精确匹配。两者至少存在一个，同时存在时必须全部匹配。只有本次出站请求实际使用 capability X，且 HTTP 响应匹配 X 的签名，才能认定 X 被拒绝。单凭相同 status/body、但请求没有使用 X，不得触发降级。
+
+每次 `callAdaptive()` 最多增加一次请求：
+
+1. 初次请求失败且命中签名时，记录负面记忆并按对应 recovery 重编请求。
+2. 降级请求成功时返回结果、降级记录与 `retried=true`。
+3. 降级请求仍失败时不再重试，并抛出第一次请求的原始 HTTP 错误。第二次失败若匹配其实际使用的另一能力，可记录该拒绝供后续请求使用。
+
+| capability | recovery | wire 变化 |
+|---|---|---|
+| `document` | `degrade-document` | 有页面转换器且 vision 可用时转逐页图片；否则用文本转换器提取纯文本 |
+| `image` | `strip-image` | 移除 user/tool result 图片，并在原位置或 tool result 文本末尾加入明确注记 |
+| `thinking-param` | `remove-thinking-param` | 移除 Anthropic `thinking` 或 OpenAI `reasoning` / `reasoning_effort` 控制参数 |
+
+所有实际转换继续产生 `DegradationRecord`。运行时适应不得修改 codec 的 constructor capability，也不得把后验记忆伪装成 host 配置。
+
+负面记忆键为 `(endpoint, model, capability)`，值为 `rejectedAt`。默认 TTL 为 24 小时，可在创建 memory 时配置；只记拒绝，不记成功。到期条目立即删除且不留墓碑，因此下一次请求恢复富形态并可自然发现端点已升级。v1 只使用进程内 `Map`，不持久化。
+
+非目标：不维护 endpoint profile，不定期 probe，不跟踪长期行为，不自动发现“声明不支持、端点实际新增”的能力，也不提供 probe 工具。
 
 ## 4. Vendor 协议规范与实测偏差
 
@@ -424,7 +459,7 @@ Fixture 禁止包含内部域名、IP、账号、路径、provider 路由名和 
 每个 corpus 文件必须且只能被 `normative/registry.json` 中一条规则精确登记，禁止按目录、文件名前缀或默认值隐式继承依据。规则分为三类：
 
 - `official`：引用固定官方 source 与具体类型或 schema anchor；成功的 encode case 必须通过对应官方 request 类型的机械校验。
-- `deviation`：记录适用条件、实测日期与可复核 evidence；偏差只在所登记条件下覆盖官方规则。
+- `deviation`：叙述型条目记录适用条件、实测日期与可复核 evidence；具备稳定 HTTP 证据的能力拒绝可登记为 `capability + rejection + recovery + observedAt + evidence`，供运行时提取为拒绝签名。偏差只在所登记条件下覆盖官方规则；不能可靠匹配的行为不得硬写成签名。
 - `canoir`：记录 CanoIR 自身 IR、不变量、门控或退化检测规则及其设计理由。
 
 新增语料未登记、重复登记、官方来源未固定到不可变 commit，或成功 encode case 既没有 schema 校验也没有显式偏差登记时，conformance 检查必须失败。
