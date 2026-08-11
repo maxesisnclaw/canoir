@@ -291,28 +291,20 @@
       ]
     },
     {
-      "id": "openai-chat-reasoning-object-deviation",
-      "basis": "deviation",
-      "condition": "部分 OpenAI-compatible 端点要求 reasoning object，而非官方 reasoning_effort 字段。",
-      "testedAt": "2026-08-10",
-      "evidence": [
-        "conformance/corpus/compat-205-openai-reasoning-object.json"
-      ],
+      "id": "openai-chat-reasoning-object-extension",
+      "basis": "extension",
       "cases": [
         "compat-205-openai-reasoning-object.json"
-      ]
+      ],
+      "note": "请求侧 reasoning 参数形态（reasoning:{effort} 对象）：Chat Completions spec 未覆盖 reasoning 控制，端点自扩属合法 extension。"
     },
     {
-      "id": "openai-chat-reasoning-content-deviation",
-      "basis": "deviation",
-      "condition": "部分 OpenAI-compatible 响应返回非标准 reasoning_content 字段。",
-      "testedAt": "2026-08-10",
-      "evidence": [
-        "conformance/corpus/thinking-201-openai-discard-reasoning.json"
-      ],
+      "id": "openai-chat-reasoning-content-extension",
+      "basis": "extension",
       "cases": [
         "thinking-201-openai-discard-reasoning.json"
-      ]
+      ],
+      "note": "响应侧 reasoning_content 字段：spec 未定义 reasoning 输出，厂商自加字段属合法 extension；当前策略为丢弃并记录，不回放。"
     },
     {
       "id": "responses-official-request",
@@ -341,16 +333,12 @@
       ]
     },
     {
-      "id": "responses-thought-signature-deviation",
-      "basis": "deviation",
-      "condition": "兼容端点在 function_call item 上返回并要求回传非标准 thought_signature。",
-      "testedAt": "2026-08-10",
-      "evidence": [
-        "conformance/corpus/thinking-301-responses-provider-replay.json"
-      ],
+      "id": "responses-thought-signature-extension",
+      "basis": "extension",
       "cases": [
         "thinking-301-responses-provider-replay.json"
-      ]
+      ],
+      "note": "Responses 兼容端点自加的 thought_signature 字段需原样回传：spec 未覆盖，属合法 extension。"
     }
   ]
 }

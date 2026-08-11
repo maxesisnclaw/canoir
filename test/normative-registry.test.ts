@@ -54,6 +54,8 @@ describe('M6 normative registry', () => {
         expect(rule.condition.length).toBeGreaterThan(0)
         expect(rule.testedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/)
         expect(rule.evidence.length).toBeGreaterThan(0)
+      } else if (rule.basis === 'extension') {
+        expect(rule.note.length).toBeGreaterThan(0)
       } else {
         expect(rule.rationale.length).toBeGreaterThan(0)
       }
@@ -74,7 +76,7 @@ describe('M6 normative registry', () => {
         expected.error !== undefined
       if (isError) continue
       const rule = indexed.get(item.file)?.[0]
-      expect(rule?.schema !== undefined || rule?.basis === 'deviation').toBe(true)
+      expect(rule?.schema !== undefined || rule?.basis === 'deviation' || rule?.basis === 'extension').toBe(true)
     }
   })
 })

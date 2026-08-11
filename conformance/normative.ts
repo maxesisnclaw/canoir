@@ -34,6 +34,15 @@ export type NormativeRule =
       cases: string[]
     }
   | {
+      // extension：spec 定义域之外的端点自留地（自加字段/参数）。
+      // 不是偏差——对外不指控，仅信息记录；要求 note 说明形态。
+      id: string
+      basis: 'extension'
+      note: string
+      schema?: OfficialSchema
+      cases: string[]
+    }
+  | {
       id: string
       basis: 'canoir'
       rationale: string
