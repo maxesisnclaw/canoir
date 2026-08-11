@@ -31,17 +31,17 @@ import {
 } from '../src/degradation'
 import {
   OpenAIResponsesCodec,
-  OpenAIResponsesHttpError,
   OpenAIResponsesProtocolError,
   type OpenAIResponsesCodecConfig,
   type OpenAIResponsesEncodeOptions,
   type OpenAIResponsesSseEvent,
 } from '../src/codecs/openai-responses'
 import {
-  CapabilityRejectionMemory,
-  RuntimeCapabilityAdapter,
+  classifyCapabilityRejection,
+  normalizeRejectionSignatures,
   type RejectionSignature,
-} from '../src/adaptation'
+  type RuntimeCapability,
+} from '../src/rejection'
 import type { JsonObject, JsonValue, Message } from '../src/types'
 import {
   validateMessages,
@@ -429,104 +429,48 @@ function stringifyActual(input: JsonObject): JsonValue {
 
 function rejectionSignatures(input: JsonObject): RejectionSignature[] {
   if (!Array.isArray(input.signatures)) {
-    throw new Error('adaptation case 缺少 input.signatures')
+    throw new Error('rejection case 缺少 input.signatures')
   }
-  return input.signatures as unknown as RejectionSignature[]
+  return normalizeRejectionSignatures(
+    input.signatures as unknown as RejectionSignature[],
+  )
 }
 
-function successfulResponsesSse(): string {
-  return [
-    'event: response.output_text.done',
-    'data: {"type":"response.output_text.done","item_id":"msg-a","output_index":0,"content_index":0,"text":"ok"}',
-    '',
-    'event: response.completed',
-    'data: {"type":"response.completed","response":{"usage":{"input_tokens":3,"output_tokens":1},"output":[{"id":"msg-a","type":"message","role":"assistant","content":[{"type":"output_text","text":"ok"}]}]}}',
-    '',
-  ].join('\n')
-}
-
-async function responsesAdaptiveActual(input: JsonObject): Promise<JsonValue> {
-  if (!Array.isArray(input.httpResponses)) {
-    throw new Error('adaptation case 缺少 input.httpResponses')
+function capabilityRejectionActual(input: JsonObject): JsonValue {
+  if (
+    !isRecord(input.rejection) ||
+    typeof input.rejection.status !== 'number' ||
+    typeof input.rejection.responseBody !== 'string'
+  ) {
+    throw new Error('rejection case 缺少 input.rejection')
   }
-  const queue = [...input.httpResponses]
-  const requestBodies: JsonValue[] = []
-  const fetchImpl = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-    requestBodies.push(
-      toJsonValue(JSON.parse(String(init?.body)) as unknown, 'adaptive request'),
-    )
-    const next = queue.shift()
-    if (!isRecord(next) || typeof next.status !== 'number') {
-      throw new Error('adaptation case 的 httpResponses 已耗尽或格式非法')
-    }
-    const body = next.kind === 'success' ? successfulResponsesSse() : String(next.body ?? '')
-    return new Response(body, {
-      status: next.status,
-      ...(next.kind === 'success'
-        ? { headers: { 'content-type': 'text/event-stream' } }
-        : {}),
-    })
-  }) as typeof globalThis.fetch
-  const codec = new OpenAIResponsesCodec({
-    ...openAIResponsesCodecConfig(input),
-    fetch: fetchImpl,
-  })
-  const adapter = new RuntimeCapabilityAdapter(rejectionSignatures(input))
-  try {
-    const result = await codec.callAdaptive(
-      adapter,
-      messages(input),
-      openAIResponsesEncodeOptions(input),
-    )
-    return toJsonValue(
-      {
-        requestBodies,
-        retried: result.retried,
-        degradations: result.degradations,
-      },
-      'adaptive result',
-    )
-  } catch (error) {
-    if (error instanceof OpenAIResponsesHttpError) {
-      return {
-        requestBodies,
-        error: {
-          name: error.name,
-          status: error.status,
-          responseBody: error.responseBody,
+  if (
+    !Array.isArray(input.usedCapabilities) ||
+    !input.usedCapabilities.every((item) => typeof item === 'string')
+  ) {
+    throw new Error('rejection case 缺少 input.usedCapabilities')
+  }
+  const error = classifyCapabilityRejection(
+    {
+      status: input.rejection.status,
+      responseBody: input.rejection.responseBody,
+    },
+    input.usedCapabilities as RuntimeCapability[],
+    rejectionSignatures(input),
+  )
+  return error === undefined
+    ? { matched: false }
+    : toJsonValue(
+        {
+          matched: true,
+          error: {
+            name: error.name,
+            capability: error.capability,
+            evidence: error.evidence,
+          },
         },
-      }
-    }
-    throw error
-  }
-}
-
-async function adaptationMemoryExpiryActual(input: JsonObject): Promise<JsonValue> {
-  if (typeof input.ttlMs !== 'number' || typeof input.expiredAt !== 'number') {
-    throw new Error('memory expiry case 缺少 ttlMs/expiredAt')
-  }
-  let now = 0
-  const memory = new CapabilityRejectionMemory({
-    ttlMs: input.ttlMs,
-    now: () => now,
-  })
-  memory.remember('https://endpoint-a.example', 'model-a', 'image')
-  const adapter = new RuntimeCapabilityAdapter([], memory)
-  const seen: boolean[] = []
-  const execute = () =>
-    adapter.execute({
-      endpoint: 'https://endpoint-a.example',
-      model: 'model-a',
-      usedCapabilities: (rejected) => {
-        seen.push(rejected.has('image'))
-        return rejected.has('image') ? [] : ['image']
-      },
-      attempt: async () => ({ value: 'ok' }),
-    })
-  await execute()
-  now = input.expiredAt
-  await execute()
-  return { rejectedBeforeExpiry: seen[0] ?? false, rejectedAfterExpiry: seen[1] ?? false }
+        'capability rejection result',
+      )
 }
 
 export async function runConformanceCase(
@@ -719,11 +663,8 @@ export async function runConformanceCase(
         )
         break
       }
-      case 'responses-call-adaptive':
-        actual = await responsesAdaptiveActual(item.input)
-        break
-      case 'adaptation-memory-expiry':
-        actual = await adaptationMemoryExpiryActual(item.input)
+      case 'capability-rejection-classify':
+        actual = capabilityRejectionActual(item.input)
         break
       default:
         throw new Error(`不支持的 conformance operation: ${item.operation}`)

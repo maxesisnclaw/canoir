@@ -93,18 +93,15 @@ describe('conformance runner', () => {
     ).toBe(true)
   })
 
-  test('M8 识别、三类降级、自限重试与 TTL 恢复均有语料', () => {
-    const adaptationCases = cases.filter(
-      (item) => item.category === 'adaptation',
-    )
-    expect(adaptationCases.length).toBeGreaterThanOrEqual(5)
-    const corpus = JSON.stringify(adaptationCases.map((item) => item.expected))
+  test('M8 三类拒绝识别与请求相关性门控均有语料', () => {
+    const rejectionCases = cases.filter((item) => item.category === 'rejection')
+    expect(rejectionCases.length).toBeGreaterThanOrEqual(4)
+    const corpus = JSON.stringify(rejectionCases.map((item) => item.expected))
     for (const marker of [
-      'document-to-images',
-      '图片已因目标端点拒绝而移除',
-      'thinking-param-removed',
-      'first opaque error',
-      'rejectedAfterExpiry',
+      'degrade-document',
+      'strip-image',
+      'remove-thinking-param',
+      '"matched":false',
     ]) {
       expect(corpus).toContain(marker)
     }

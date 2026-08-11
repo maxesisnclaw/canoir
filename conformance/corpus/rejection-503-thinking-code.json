@@ -1,0 +1,40 @@
+{
+  "name": "thinking 参数请求与精确 error code 签名命中",
+  "category": "rejection",
+  "operation": "capability-rejection-classify",
+  "recorded": false,
+  "input": {
+    "usedCapabilities": ["thinking-param"],
+    "rejection": {
+      "status": 400,
+      "responseBody": "{\"error\":{\"code\":\"unsupported_parameter\"}}"
+    },
+    "signatures": [
+      {
+        "id": "thinking-param-rejected",
+        "capability": "thinking-param",
+        "rejection": { "status": 400, "errorCode": "unsupported_parameter" },
+        "recoveryHint": "remove-thinking-param",
+        "observedAt": "2026-08-11",
+        "evidence": ["合成拒绝响应"]
+      }
+    ]
+  },
+  "expected": {
+    "matched": true,
+    "error": {
+      "name": "CapabilityRejectionError",
+      "capability": "thinking-param",
+      "evidence": {
+        "signatureId": "thinking-param-rejected",
+        "recoveryHint": "remove-thinking-param",
+        "observedAt": "2026-08-11",
+        "references": ["合成拒绝响应"],
+        "rejection": {
+          "status": 400,
+          "responseBody": "{\"error\":{\"code\":\"unsupported_parameter\"}}"
+        }
+      }
+    }
+  }
+}

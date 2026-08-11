@@ -31,13 +31,12 @@ import type {
 } from '../types'
 import { validateMessages } from '../validate'
 import {
-  capabilityAfterRuntimeRejections,
-  optionsAfterRuntimeRejections,
-  thinkingParamRemovedDegradation,
-  usedRuntimeCapabilities,
-  type AdaptiveCallResult,
-  type RuntimeCapabilityAdapter,
-} from '../adaptation'
+  classifyCapabilityRejection,
+  normalizeRejectionSignatures,
+  usedRequestCapabilities,
+  type RejectionSignature,
+  type RuntimeCapability,
+} from '../rejection'
 
 export interface OpenAIResponsesCodecConfig {
   providerId: string
@@ -46,6 +45,7 @@ export interface OpenAIResponsesCodecConfig {
   apiKey: string
   headers?: Record<string, string>
   capability: Partial<ProviderCapability>
+  rejectionSignatures?: readonly RejectionSignature[]
   fetch?: typeof globalThis.fetch
 }
 
@@ -925,9 +925,13 @@ export function stringifyOpenAIResponsesRequest(
 }
 
 export class OpenAIResponsesCodec {
+  private readonly rejectionSignatures: RejectionSignature[]
   private capability: ProviderCapability
 
   constructor(private readonly config: OpenAIResponsesCodecConfig) {
+    this.rejectionSignatures = normalizeRejectionSignatures(
+      config.rejectionSignatures,
+    )
     this.capability = normalizeCapability(config.capability)
   }
 
@@ -956,6 +960,7 @@ export class OpenAIResponsesCodec {
   private async callEncoded(
     request: OpenAIResponsesEncodedRequest,
     options: OpenAIResponsesEncodeOptions,
+    usedCapabilities: readonly RuntimeCapability[],
   ): Promise<OpenAIResponsesDecodedResponse> {
     await writeRequestDiagnostic(options.diagnosticWriter, {
       method: 'POST',
@@ -971,7 +976,17 @@ export class OpenAIResponsesCodec {
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
     if (!response.ok) {
-      throw new OpenAIResponsesHttpError(response.status, await response.text())
+      const original = new OpenAIResponsesHttpError(
+        response.status,
+        await response.text(),
+      )
+      throw (
+        classifyCapabilityRejection(
+          original,
+          usedCapabilities,
+          this.rejectionSignatures,
+        ) ?? original
+      )
     }
     if (response.body === null) {
       throw new OpenAIResponsesProtocolError(
@@ -990,60 +1005,15 @@ export class OpenAIResponsesCodec {
     options: OpenAIResponsesEncodeOptions = {},
   ): Promise<OpenAIResponsesDecodedResponse> {
     const request = this.encode(messages, options)
-    return this.callEncoded(request, options)
-  }
-
-  async callAdaptive(
-    adapter: RuntimeCapabilityAdapter,
-    messages: readonly Message[],
-    options: OpenAIResponsesEncodeOptions = {},
-  ): Promise<AdaptiveCallResult<OpenAIResponsesDecodedResponse>> {
-    return adapter.execute({
-      endpoint: this.config.endpoint,
-      model: cleanWireModelId(this.config.model),
-      usedCapabilities: (rejected) => {
-        const capability = capabilityAfterRuntimeRejections(
-          this.capability,
-          rejected,
-        )
-        const adaptedOptions = optionsAfterRuntimeRejections(options, rejected)
-        return usedRuntimeCapabilities(
-          messages,
-          capability,
-          adaptedOptions,
-          options.reasoningEffort !== undefined,
-        )
-      },
-      attempt: async (rejected) => {
-        const capability = capabilityAfterRuntimeRejections(
-          this.capability,
-          rejected,
-        )
-        const adaptedOptions = optionsAfterRuntimeRejections(options, rejected)
-        const { reasoningEffort: _reasoningEffort, ...withoutReasoning } =
-          adaptedOptions
-        const attemptOptions: OpenAIResponsesEncodeOptions = rejected.has(
-          'thinking-param',
-        )
-          ? withoutReasoning
-          : adaptedOptions
-        const request = encodeOpenAIResponsesRequest(
-          { ...this.config, capability },
-          messages,
-          attemptOptions,
-        )
-        const degradations = [...request.degradations]
-        if (
-          rejected.has('thinking-param') &&
-          options.reasoningEffort !== undefined
-        ) {
-          degradations.push(thinkingParamRemovedDegradation())
-        }
-        return {
-          value: await this.callEncoded(request, attemptOptions),
-          degradations,
-        }
-      },
-    })
+    return this.callEncoded(
+      request,
+      options,
+      usedRequestCapabilities(
+        messages,
+        this.capability,
+        options,
+        options.reasoningEffort !== undefined,
+      ),
+    )
   }
 }

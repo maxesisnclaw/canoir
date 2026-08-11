@@ -341,15 +341,14 @@
       "note": "Responses 兼容端点自加的 thought_signature 字段需原样回传：spec 未覆盖，属合法 extension。"
     },
     {
-      "id": "canoir-runtime-capability-adaptation",
+      "id": "canoir-runtime-capability-rejection",
       "basis": "canoir",
-      "rationale": "运行时能力后验修正只在请求实际使用对应能力且响应匹配拒绝签名时触发；最多重试一次，并用短期负面记忆避免重复失败。合成响应仅验证 CanoIR 机制，不声称任何真实端点偏差。",
+      "rationale": "拒绝识别只在请求实际使用对应能力且响应匹配签名时产生类型化错误；是否重试、如何降级和是否记忆均由 host 决定。合成响应仅验证 CanoIR 识别机制，不声称任何真实端点偏差。",
       "cases": [
-        "adaptation-501-document-retry.json",
-        "adaptation-502-image-retry.json",
-        "adaptation-503-thinking-retry.json",
-        "adaptation-504-fuzzy-self-limit.json",
-        "adaptation-505-memory-expiry.json"
+        "rejection-501-document-match.json",
+        "rejection-502-image-match.json",
+        "rejection-503-thinking-code.json",
+        "rejection-504-unrelated-request.json"
       ]
     }
   ]

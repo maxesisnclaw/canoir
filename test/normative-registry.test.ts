@@ -53,6 +53,7 @@ describe('M6 normative registry', () => {
       } else if (rule.basis === 'deviation') {
         if ('rejection' in rule) {
           expect(rule.observedAt).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+          expect(rule.recoveryHint.length).toBeGreaterThan(0)
           expect(
             rule.rejection.bodyMatch !== undefined ||
               rule.rejection.errorCode !== undefined,

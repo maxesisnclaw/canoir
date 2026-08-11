@@ -1,0 +1,40 @@
+{
+  "name": "image 请求与模糊 body 签名相关命中",
+  "category": "rejection",
+  "operation": "capability-rejection-classify",
+  "recorded": false,
+  "input": {
+    "usedCapabilities": ["image"],
+    "rejection": {
+      "status": 400,
+      "responseBody": "Invalid request: unsupported image input"
+    },
+    "signatures": [
+      {
+        "id": "image-rejected",
+        "capability": "image",
+        "rejection": { "status": 400, "bodyMatch": "Invalid request" },
+        "recoveryHint": "strip-image",
+        "observedAt": "2026-08-11",
+        "evidence": ["合成拒绝响应"]
+      }
+    ]
+  },
+  "expected": {
+    "matched": true,
+    "error": {
+      "name": "CapabilityRejectionError",
+      "capability": "image",
+      "evidence": {
+        "signatureId": "image-rejected",
+        "recoveryHint": "strip-image",
+        "observedAt": "2026-08-11",
+        "references": ["合成拒绝响应"],
+        "rejection": {
+          "status": 400,
+          "responseBody": "Invalid request: unsupported image input"
+        }
+      }
+    }
+  }
+}

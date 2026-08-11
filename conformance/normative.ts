@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
 import type {
-  RecoveryAction,
+  RecoveryHint,
   RejectionSignature,
   RuntimeCapability,
-} from '../src/adaptation'
+} from '../src/rejection'
 
 export type OfficialSchema = 'anthropic' | 'openai-chat' | 'responses'
 
@@ -43,7 +43,7 @@ export type NormativeRule =
       basis: 'deviation'
       capability: RuntimeCapability
       rejection: RejectionSignature['rejection']
-      recovery: RecoveryAction
+      recoveryHint: RecoveryHint
       observedAt: string
       evidence: string[]
       schema?: OfficialSchema
@@ -105,7 +105,7 @@ export function runtimeRejectionSignatures(
             id: rule.id,
             capability: rule.capability,
             rejection: { ...rule.rejection },
-            recovery: rule.recovery,
+            recoveryHint: rule.recoveryHint,
             observedAt: rule.observedAt,
             evidence: [...rule.evidence],
           },

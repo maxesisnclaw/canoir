@@ -1,0 +1,40 @@
+{
+  "name": "document 请求与拒绝签名相关命中",
+  "category": "rejection",
+  "operation": "capability-rejection-classify",
+  "recorded": false,
+  "input": {
+    "usedCapabilities": ["document"],
+    "rejection": {
+      "status": 400,
+      "responseBody": "document input rejected"
+    },
+    "signatures": [
+      {
+        "id": "document-rejected",
+        "capability": "document",
+        "rejection": { "status": 400, "bodyMatch": "document input rejected" },
+        "recoveryHint": "degrade-document",
+        "observedAt": "2026-08-11",
+        "evidence": ["合成拒绝响应"]
+      }
+    ]
+  },
+  "expected": {
+    "matched": true,
+    "error": {
+      "name": "CapabilityRejectionError",
+      "capability": "document",
+      "evidence": {
+        "signatureId": "document-rejected",
+        "recoveryHint": "degrade-document",
+        "observedAt": "2026-08-11",
+        "references": ["合成拒绝响应"],
+        "rejection": {
+          "status": 400,
+          "responseBody": "document input rejected"
+        }
+      }
+    }
+  }
+}

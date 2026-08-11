@@ -1,0 +1,24 @@
+{
+  "name": "模糊签名不匹配未实际使用的 capability",
+  "category": "rejection",
+  "operation": "capability-rejection-classify",
+  "recorded": false,
+  "input": {
+    "usedCapabilities": ["thinking-param"],
+    "rejection": {
+      "status": 400,
+      "responseBody": "Invalid request"
+    },
+    "signatures": [
+      {
+        "id": "image-rejected",
+        "capability": "image",
+        "rejection": { "status": 400, "bodyMatch": "Invalid request" },
+        "recoveryHint": "strip-image",
+        "observedAt": "2026-08-11",
+        "evidence": ["合成拒绝响应"]
+      }
+    ]
+  },
+  "expected": { "matched": false }
+}

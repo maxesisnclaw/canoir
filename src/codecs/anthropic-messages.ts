@@ -14,13 +14,12 @@ import type {
   Usage,
 } from '../types'
 import {
-  capabilityAfterRuntimeRejections,
-  optionsAfterRuntimeRejections,
-  thinkingParamRemovedDegradation,
-  usedRuntimeCapabilities,
-  type AdaptiveCallResult,
-  type RuntimeCapabilityAdapter,
-} from '../adaptation'
+  classifyCapabilityRejection,
+  normalizeRejectionSignatures,
+  usedRequestCapabilities,
+  type RejectionSignature,
+  type RuntimeCapability,
+} from '../rejection'
 import {
   applyCapability,
   CapabilityError,
@@ -55,6 +54,7 @@ export interface AnthropicCodecConfig {
   compatMode?: AnthropicCompatMode
   contextWindowTokens?: number
   capability: Partial<ProviderCapability>
+  rejectionSignatures?: readonly RejectionSignature[]
   fetch?: typeof globalThis.fetch
 }
 
@@ -1324,10 +1324,14 @@ export function parseAnthropicSse(text: string): AnthropicSseEvent[] {
 
 export class AnthropicMessagesCodec {
   private readonly fetchImpl: typeof globalThis.fetch
+  private readonly rejectionSignatures: RejectionSignature[]
   private capability: ProviderCapability
 
   constructor(private readonly config: AnthropicCodecConfig) {
     this.fetchImpl = config.fetch ?? globalThis.fetch
+    this.rejectionSignatures = normalizeRejectionSignatures(
+      config.rejectionSignatures,
+    )
     this.capability = normalizeCapability(config.capability)
   }
 
@@ -1349,6 +1353,7 @@ export class AnthropicMessagesCodec {
   private async callEncoded(
     request: AnthropicEncodedRequest,
     options: AnthropicEncodeOptions,
+    usedCapabilities: readonly RuntimeCapability[],
   ): Promise<AnthropicDecodedResponse> {
     await writeRequestDiagnostic(options.diagnosticWriter, {
       method: 'POST',
@@ -1363,7 +1368,14 @@ export class AnthropicMessagesCodec {
     })
     const responseText = await response.text()
     if (!response.ok) {
-      throw new AnthropicHttpError(response.status, responseText)
+      const original = new AnthropicHttpError(response.status, responseText)
+      throw (
+        classifyCapabilityRejection(
+          original,
+          usedCapabilities,
+          this.rejectionSignatures,
+        ) ?? original
+      )
     }
     const contentType = response.headers.get('content-type') ?? ''
     if (contentType.includes('text/event-stream')) {
@@ -1411,56 +1423,15 @@ export class AnthropicMessagesCodec {
     options: AnthropicEncodeOptions = {},
   ): Promise<AnthropicDecodedResponse> {
     const request = this.encode(messages, options)
-    return this.callEncoded(request, options)
-  }
-
-  async callAdaptive(
-    adapter: RuntimeCapabilityAdapter,
-    messages: readonly Message[],
-    options: AnthropicEncodeOptions = {},
-  ): Promise<AdaptiveCallResult<AnthropicDecodedResponse>> {
-    return adapter.execute({
-      endpoint: this.config.endpoint,
-      model: cleanWireModelId(this.config.model),
-      usedCapabilities: (rejected) => {
-        const capability = capabilityAfterRuntimeRejections(
-          this.capability,
-          rejected,
-        )
-        const adaptedOptions = optionsAfterRuntimeRejections(options, rejected)
-        return usedRuntimeCapabilities(
-          messages,
-          capability,
-          adaptedOptions,
-          options.thinking !== undefined,
-        )
-      },
-      attempt: async (rejected) => {
-        const capability = capabilityAfterRuntimeRejections(
-          this.capability,
-          rejected,
-        )
-        const adaptedOptions = optionsAfterRuntimeRejections(options, rejected)
-        const { thinking: _thinking, ...withoutThinking } = adaptedOptions
-        const attemptOptions: AnthropicEncodeOptions = rejected.has(
-          'thinking-param',
-        )
-          ? withoutThinking
-          : adaptedOptions
-        const request = encodeAnthropicRequest(
-          { ...this.config, capability },
-          messages,
-          attemptOptions,
-        )
-        const degradations = [...request.degradations]
-        if (rejected.has('thinking-param') && options.thinking !== undefined) {
-          degradations.push(thinkingParamRemovedDegradation())
-        }
-        return {
-          value: await this.callEncoded(request, attemptOptions),
-          degradations,
-        }
-      },
-    })
+    return this.callEncoded(
+      request,
+      options,
+      usedRequestCapabilities(
+        messages,
+        this.capability,
+        options,
+        options.thinking !== undefined,
+      ),
+    )
   }
 }

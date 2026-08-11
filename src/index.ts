@@ -1,17 +1,11 @@
 export * from './capability'
-export {
-  CapabilityRejectionMemory,
-  RuntimeCapabilityAdapter,
-} from './adaptation'
+export { CapabilityRejectionError } from './rejection'
 export type {
-  AdaptiveAttemptResult,
-  AdaptiveCallResult,
-  CapabilityRejectionMemoryOptions,
-  RecoveryAction,
+  CapabilityRejectionEvidence,
+  RecoveryHint,
   RejectionSignature,
   RuntimeCapability,
-  RuntimeCapabilityExecution,
-} from './adaptation'
+} from './rejection'
 export * from './degradation'
 export * from './diagnostic'
 export * from './types'

@@ -19,6 +19,7 @@ CanoIR 是多 LLM API 的**协议中间层**。任何 agent harness 可以把消
 边界不由"我们不做什么"定义，而由接入面定义：
 
 - 本包**零 host import**。host 的细节（持久化、路由、密钥、重试策略、UI）全部通过接口注入，不出现在本包类型里。
+- **边界元规则**：CanoIR 只回答“这是什么、这怎么编码”，从不回答“上次怎样、下次怎么办”。encode 是纯函数；CanoIR 无运行时记忆、无自动重试、无路由或降级决策状态。
 - 验收测试是真实的：第一个消费者接入时不需要任何 shim、全局状态或临时 bridge。接入需要打补丁 = 边界画错了，改边界，不打补丁。
 
 **当前唯一消费者**：一个私有 agent harness 的 direct runtime（身份与路径记录于 `AGENTS.local.md`）。第二个预期消费者：将来的 ReAct loop 组件。不为第三个假想消费者设计任何东西（见 R3）。
@@ -34,7 +35,7 @@ canoir/
 │   ├── types.ts         # IR 消息模型（§3）
 │   ├── validate.ts      # 消息序列合法性校验器（§4 不变量的可执行形态）
 │   ├── capability.ts    # capability 矩阵 + 降级策略（§6）
-│   ├── adaptation.ts    # 运行时拒绝识别 + 一次降级重试 + 负面记忆
+│   ├── rejection.ts     # HTTP capability 拒绝签名 + 类型化识别
 │   └── codecs/
 │       ├── anthropic-messages.ts
 │       ├── openai-chat-completions.ts
@@ -161,10 +162,10 @@ interface ProviderCapability {
 ## 7. Conformance 语料
 
 - **纯数据**：一个 case 一个 JSON 文件，零代码。格式：输入（IR 消息序列或录制的 SSE 事件流）+ capability → 期望输出（编码结果 / 解码结果 / 校验错误 / 降级决策）
-- **命名**：`<类别>-<序号>-<短语>.json`，类别沿用 §5 的分类（structure/stream/toolcall/thinking/usage/cache/compat/refusal/empty/degrade/adaptation）
+- **命名**：`<类别>-<序号>-<短语>.json`，类别沿用 §5 的分类（structure/stream/toolcall/thinking/usage/cache/compat/refusal/empty/degrade/rejection）
 - **种子来源**（M2 起逐类转化）：protocol-survey.md 的 Part B 清单 + 宿主项目 `*.test.ts` 里的编码断言 + 生产日志锚点（lone surrogate 500、GLM usage 0/0、max_tokens 截断、refusal 记录——把真实错误响应录制成 fixture）
 - **去标识纪律**：语料中禁止出现内部域名、IP、路径、账号、内部 provider 命名。统一用 `endpoint-a`/`provider-x` 式通用名。这是公开发布的红线（§9 hook 会拦，但第一责任人是写语料的你）
-- **依据登记**：每个 corpus 文件必须且只能在 `normative/registry.json` 中登记一次。`official` 规则引用固定 source 与 anchor；叙述型 `deviation` 写明 condition、testedAt 与 evidence，可运行拒绝签名写明 capability、rejection、recovery、observedAt 与 evidence；`canoir` 规则必须写明 rationale。禁止新增未登记语料或用默认规则隐式继承依据
+- **依据登记**：每个 corpus 文件必须且只能在 `normative/registry.json` 中登记一次。`official` 规则引用固定 source 与 anchor；叙述型 `deviation` 写明 condition、testedAt 与 evidence，可运行拒绝签名写明 capability、rejection、recoveryHint、observedAt 与 evidence；`canoir` 规则必须写明 rationale。禁止新增未登记语料或用默认规则隐式继承依据
 - **机械校验**：成功 encode case 必须通过固定官方 request type，或显式登记为实测偏差。官方 SDK 只作为 devDependency，不得进入运行时依赖
 - 数量预期：M5 完成时 ≥40 条，其中流式录制类 ≥10 条
 
@@ -220,10 +221,10 @@ interface ProviderCapability {
 
 **M8 — 运行时能力适应层**
 - registry 支持把有可靠 HTTP 证据的 deviation 表达为 capability 拒绝签名；无法形成稳定 status/body/error code 的条目保留叙述形态，不硬凑
-- `RuntimeCapabilityAdapter` 只在“请求实际使用 capability X”且响应匹配 X 的拒绝签名时触发一次降级重试；重试仍失败时抛第一次原始错误
-- v1 recovery 固定为 document 转页面图片再退纯文本、image 剥离并注入文本说明、thinking 控制参数移除；全部沿用 degradation 记录通道
-- `(endpoint, model, capability)` 负面记忆默认 TTL 24h，仅记拒绝、到期删除、进程内保存；不做 profile、probe、能力升级跟踪或持久化
-- DoD：识别匹配、模糊误判自限、三类 recovery、TTL 到期恢复富形态语料全绿；现有 deviation 逐条审计，不能可靠改写的在对应 issue 说明
+- 拒绝签名固定包含 capability、rejection、recoveryHint、observedAt、evidence；`recoveryHint` 只提供语义提示，不执行内容转换或策略动作
+- `call()` 仅在“请求实际使用 capability X”且 HTTP 响应匹配 X 的签名时抛 `CapabilityRejectionError`；不匹配时保留原始 HTTP 错误
+- CanoIR 不自动重试、不保存负面记忆、不决定换模型或降级内容；host 可用更弱 capability 或既有 `DocumentConverters` 处理后重新调用纯 encode/call
+- DoD：三类 capability 的签名识别、error code 精确匹配与“请求未使用该能力时不命中”语料全绿；现有 deviation 逐条审计，不能可靠改写的在对应 issue 说明
 
 ## 9. Pre-push hook（公开发布防线）
 

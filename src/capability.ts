@@ -39,7 +39,6 @@ export interface DegradationRecord {
     | 'filtered'
     | 'document-to-images'
     | 'document-to-text'
-    | 'thinking-param-removed'
     | 'cache-hint-ignored'
   reason: string
 }
@@ -52,7 +51,6 @@ export interface DocumentConverters {
 export interface CapabilityTransformOptions {
   documentConverters?: DocumentConverters
   preferDocumentImages?: boolean
-  imageFallbackText?: string
   promptCache?: PromptCacheHint
 }
 
@@ -253,9 +251,6 @@ function transformUserBlocks(
         action: 'filtered',
         reason: '目标 provider 的 vision capability 为 false',
       })
-      if (options.imageFallbackText !== undefined) {
-        transformed.push({ type: 'text', text: options.imageFallbackText })
-      }
       continue
     }
     if (block.type === 'document') {
@@ -291,7 +286,6 @@ function transformAssistantBlocks(
 function transformToolBlock(
   block: ToolResultBlock,
   capability: ProviderCapability,
-  options: CapabilityTransformOptions,
   degradations: DegradationRecord[],
 ): ToolResultBlock {
   if (!capability.toolCalls) {
@@ -307,14 +301,7 @@ function transformToolBlock(
     reason: '目标 provider 的 vision capability 为 false，过滤 tool result 图片',
   })
   const { images: _images, ...withoutImages } = block
-  if (options.imageFallbackText === undefined) return withoutImages
-  return {
-    ...withoutImages,
-    content:
-      withoutImages.content.length === 0
-        ? options.imageFallbackText
-        : `${withoutImages.content}\n${options.imageFallbackText}`,
-  }
+  return withoutImages
 }
 
 export function applyCapability(
@@ -348,7 +335,7 @@ export function applyCapability(
         return {
           role: 'tool',
           content: message.content.map((block) =>
-            transformToolBlock(block, capability, options, degradations),
+            transformToolBlock(block, capability, degradations),
           ) as [ToolResultBlock, ...ToolResultBlock[]],
         }
     }
