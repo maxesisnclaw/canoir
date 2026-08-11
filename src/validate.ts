@@ -567,6 +567,10 @@ export function validateMessages(
   }
 
   for (const [id, call] of calls) {
+    // provider_blocks verbatim 回放是 opaque 历史单元：其内嵌 tool_call 的配对责任
+    // 属于原始历史（结果可能同包回放或不在当前切片），IR 校验器只做"被引用可满足"，
+    // 不做"必须配对"要求。结构化 tool_call 仍严格检查孤儿。
+    if (call.fromProviderBlocks) continue
     if (call.resultCount === 0) {
       addIssue(
         issues,

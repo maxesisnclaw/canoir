@@ -1,0 +1,25 @@
+{
+  "name": "I1 provider_blocks 内嵌 tool_call 不报孤儿（verbatim 回放为 opaque 单元）",
+  "category": "structure",
+  "operation": "validate",
+  "invariants": ["I1"],
+  "input": {
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "start" }] },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "provider_blocks",
+            "providerId": "provider-x",
+            "blocks": [
+              { "type": "tool_use", "id": "toolu_solo", "name": "lookup", "input": {} }
+            ]
+          }
+        ]
+      },
+      { "role": "user", "content": [{ "type": "text", "text": "continue" }] }
+    ]
+  },
+  "expected": { "valid": true, "issueCodes": [] }
+}

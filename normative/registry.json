@@ -64,7 +64,8 @@
         "toolcall-006-i5-empty-object.json",
         "toolcall-007-i5-string-arguments.json",
         "toolcall-008-i5-array-arguments.json",
-        "structure-009-i1-provider-blocks-anthropic-pairing.json"
+        "structure-009-i1-provider-blocks-anthropic-pairing.json",
+        "structure-010-i1-provider-blocks-no-orphan-call.json"
       ]
     },
     {
