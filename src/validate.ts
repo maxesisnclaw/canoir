@@ -513,10 +513,14 @@ export function validateMessages(
         for (const raw of block.blocks as unknown[]) {
           if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) continue
           const rawType = (raw as { type?: unknown }).type
-          const callId = (raw as { call_id?: unknown }).call_id
-          if (typeof callId !== 'string' || callId.length === 0) continue
-          if (rawType === 'function_call') rawCalls.push(callId)
-          else if (rawType === 'function_call_output') rawOutputs.push(callId)
+          if (rawType === 'function_call' || rawType === 'tool_use') {
+            // Responses function_call 用 call_id；Anthropic tool_use 用 id
+            const callId = (raw as { call_id?: unknown }).call_id ?? (raw as { id?: unknown }).id
+            if (typeof callId === 'string' && callId.length > 0) rawCalls.push(callId)
+          } else if (rawType === 'function_call_output' || rawType === 'tool_result') {
+            const callId = (raw as { call_id?: unknown }).call_id ?? (raw as { tool_use_id?: unknown }).tool_use_id
+            if (typeof callId === 'string' && callId.length > 0) rawOutputs.push(callId)
+          }
         }
         for (const callId of rawCalls) {
           if (!calls.has(callId)) {

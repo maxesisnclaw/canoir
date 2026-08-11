@@ -1,0 +1,37 @@
+{
+  "name": "I1 provider_blocks 内嵌 Anthropic tool_use/tool_result 配对识别",
+  "category": "structure",
+  "operation": "validate",
+  "invariants": ["I1"],
+  "input": {
+    "messages": [
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "provider_blocks",
+            "providerId": "provider-x",
+            "blocks": [
+              { "type": "thinking", "thinking": "plan", "signature": "sig-1" },
+              { "type": "tool_use", "id": "toolu_1", "name": "lookup", "input": { "q": "x" } },
+              { "type": "tool_use", "id": "toolu_2", "name": "lookup", "input": { "q": "y" } }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          { "type": "tool_result", "toolCallId": "toolu_1", "content": "r1" }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [
+          { "type": "tool_result", "toolCallId": "toolu_2", "content": "r2" }
+        ]
+      }
+    ]
+  },
+  "expected": { "valid": true, "issueCodes": [] }
+}
