@@ -53,4 +53,46 @@ describe('OpenAIResponsesCodec transport', () => {
       reliable: true,
     })
   })
+
+  test('结构化回放把 assistant 文本放在 function_call 之前', () => {
+    const codec = new OpenAIResponsesCodec({
+      providerId: 'provider-x',
+      model: 'model-a',
+      endpoint: 'https://endpoint-a.example',
+      apiKey: 'test-key',
+      capability: {
+        vision: true,
+        document: 'native',
+        toolCalls: true,
+        thinking: 'native',
+        streaming: true,
+      },
+    })
+    const encoded = codec.encode([
+      { role: 'user', content: [{ type: 'text', text: 'lookup x' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'I will check.' },
+          { type: 'tool_call', id: 'call_prev', name: 'lookup', arguments: { query: 'x' } },
+        ],
+      },
+      { role: 'tool', content: [{ type: 'tool_result', toolCallId: 'call_prev', content: '{"ok":true}' }] },
+    ])
+    const types = encoded.body.input.map((item) =>
+      typeof item === 'object' && item !== null && 'type' in item && typeof item.type === 'string'
+        ? item.type
+        : typeof item === 'object' && item !== null && 'role' in item && typeof item.role === 'string'
+          ? item.role
+          : 'unknown',
+    )
+    expect(types).toEqual([
+      'user',
+      'assistant',
+      'function_call',
+      'function_call_output',
+    ])
+    expect(encoded.body.input[2]).toMatchObject({ type: 'function_call', call_id: 'call_prev' })
+    expect(encoded.body.input[3]).toMatchObject({ type: 'function_call_output', call_id: 'call_prev' })
+  })
 })

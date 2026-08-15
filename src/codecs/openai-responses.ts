@@ -368,15 +368,14 @@ function encodeInput(
     }
 
     let text = ''
-    let hasToolCall = false
+    const toolCalls: ToolCallBlock[] = []
     for (const block of message.content) {
       switch (block.type) {
         case 'text':
           text += block.text
           break
         case 'tool_call':
-          hasToolCall = true
-          input.push(encodeToolCall(block))
+          toolCalls.push(block)
           break
         case 'thinking':
           degradations.push({
@@ -401,13 +400,17 @@ function encodeInput(
           )
       }
     }
-    if (text.length > 0 || !hasToolCall) {
+    // Text must precede function_call. Strict Responses endpoints treat an
+    // assistant item between function_call and function_call_output as a
+    // missing tool output.
+    if (text.length > 0 || toolCalls.length === 0) {
       input.push({
         role: 'assistant',
-        phase: hasToolCall ? 'commentary' : 'final_answer',
+        phase: toolCalls.length > 0 ? 'commentary' : 'final_answer',
         content: [{ type: 'output_text', text }],
       })
     }
+    for (const block of toolCalls) input.push(encodeToolCall(block))
   }
   return input
 }
