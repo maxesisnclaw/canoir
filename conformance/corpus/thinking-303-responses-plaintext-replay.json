@@ -1,0 +1,56 @@
+{
+  "name": "Responses thinkingReplay=replay 把跨 provider thinking 编成未签名 reasoning_text",
+  "category": "thinking",
+  "operation": "responses-encode",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-y",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "capability": {
+      "vision": true,
+      "document": "native",
+      "toolCalls": true,
+      "thinking": "native",
+      "thinkingReplay": "replay",
+      "streaming": true
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "lookup" }] },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "thinking",
+            "thinking": "need the tool",
+            "signature": "sig-from-x",
+            "providerId": "provider-x"
+          },
+          { "type": "tool_call", "id": "call-a", "name": "lookup", "arguments": {} }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [{ "type": "tool_result", "toolCallId": "call-a", "content": "done" }]
+      }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "store": false,
+    "stream": true,
+    "input": [
+      { "role": "user", "content": [{ "type": "input_text", "text": "lookup" }] },
+      {
+        "type": "reasoning",
+        "content": [{ "type": "reasoning_text", "text": "need the tool" }]
+      },
+      { "type": "function_call", "call_id": "call-a", "name": "lookup", "arguments": "{}" },
+      { "type": "function_call_output", "call_id": "call-a", "output": "done" }
+    ],
+    "include": ["reasoning.encrypted_content"]
+  }
+}

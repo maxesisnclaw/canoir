@@ -369,6 +369,7 @@ function encodeInput(
 
     let text = ''
     const toolCalls: ToolCallBlock[] = []
+    const thinkingTexts: string[] = []
     for (const block of message.content) {
       switch (block.type) {
         case 'text':
@@ -378,11 +379,20 @@ function encodeInput(
           toolCalls.push(block)
           break
         case 'thinking':
-          degradations.push({
-            blockType: 'thinking',
-            action: 'filtered',
-            reason: 'Responses reasoning 回放需要同 provider 的原生 encrypted_content',
-          })
+          // I6：不移植外源 signature / encrypted_content。
+          // thinkingReplay=replay 只把文本编成目标未签名 reasoning_text。
+          if (replay === 'replay' && block.thinking.length > 0) {
+            thinkingTexts.push(block.thinking)
+          } else if (block.thinking.length > 0) {
+            degradations.push({
+              blockType: 'thinking',
+              action: 'filtered',
+              reason:
+                replay === 'drop'
+                  ? '目标 provider 的 thinkingReplay capability 为 drop'
+                  : 'Responses reasoning 回放需要同 provider 的原生 encrypted_content',
+            })
+          }
           break
         case 'redacted_thinking':
           break // Anthropic 私有形态，Responses 不回放
@@ -399,6 +409,12 @@ function encodeInput(
             'refusal block 不得作为普通 assistant 历史发送',
           )
       }
+    }
+    for (const thinking of thinkingTexts) {
+      input.push({
+        type: 'reasoning',
+        content: [{ type: 'reasoning_text', text: thinking }],
+      })
     }
     // Text must precede function_call. Strict Responses endpoints treat an
     // assistant item between function_call and function_call_output as a

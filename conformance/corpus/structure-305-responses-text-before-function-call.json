@@ -1,0 +1,49 @@
+{
+  "name": "Responses 结构化 encode 中 assistant 文本必须位于 function_call 之前",
+  "category": "structure",
+  "operation": "responses-encode",
+  "recorded": false,
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example",
+      "apiKey": "test-key"
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "lookup" }] },
+      {
+        "role": "assistant",
+        "content": [
+          { "type": "text", "text": "I will check." },
+          { "type": "tool_call", "id": "call-a", "name": "lookup", "arguments": { "query": "x" } }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [{ "type": "tool_result", "toolCallId": "call-a", "content": "done" }]
+      }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "store": false,
+    "stream": true,
+    "input": [
+      { "role": "user", "content": [{ "type": "input_text", "text": "lookup" }] },
+      {
+        "role": "assistant",
+        "phase": "commentary",
+        "content": [{ "type": "output_text", "text": "I will check." }]
+      },
+      {
+        "type": "function_call",
+        "call_id": "call-a",
+        "name": "lookup",
+        "arguments": "{\"query\":\"x\"}"
+      },
+      { "type": "function_call_output", "call_id": "call-a", "output": "done" }
+    ],
+    "include": ["reasoning.encrypted_content"]
+  }
+}

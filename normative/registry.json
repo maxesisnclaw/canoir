@@ -318,7 +318,8 @@
         "structure-302-responses-system-input.json",
         "structure-303-responses-tool-output-images.json",
         "structure-304-responses-native-document.json",
-        "thinking-302-responses-encrypted-replay.json"
+        "thinking-302-responses-encrypted-replay.json",
+        "thinking-304-responses-cross-provider-verify.json"
       ]
     },
     {
@@ -339,6 +340,15 @@
         "thinking-301-responses-provider-replay.json"
       ],
       "note": "Responses 兼容端点自加的 thought_signature 字段需原样回传：spec 未覆盖，属合法 extension。"
+    },
+    {
+      "id": "canoir-responses-thinking-replay",
+      "basis": "extension",
+      "note": "官方 OpenAI Responses input 的 reasoning item 需要 id+summary；CanoIR 在 thinkingReplay=replay 时发送未签名 reasoning_text。assistant input 使用 output_text + phase，也不在官方 input message 类型里。二者都是兼容端点实测接受面，不是 OpenAI 官方 input schema。",
+      "cases": [
+        "thinking-303-responses-plaintext-replay.json",
+        "structure-305-responses-text-before-function-call.json"
+      ]
     },
     {
       "id": "canoir-runtime-capability-rejection",

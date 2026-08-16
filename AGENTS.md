@@ -84,7 +84,7 @@ canoir/
 | I3 | assistant + tool_calls 时 content 序列化为 `null`（Chat Completions），不是空串 | 语料：带 tool_calls 的 assistant 消息编码后 wire 上 content 是 `null` |
 | I4 | tool_call id 永非空：provider 未返回 id 时 codec 层合成，绝不让空 id 上 wire | 语料：无 id 的 wire tool_call → IR 内 id 非空且稳定 |
 | I5 | IR 内 arguments 永为 object；wire 上的 string/`arguments` 字段等 3 种形态（A5）解析结果一致 | 语料：同一 tool_call 的三种 wire 形态 → 解码出相同 IR |
-| I6 | thinking/provider_blocks 跨 providerId 不可移植，切换 provider 时过滤 | 语料：混合 provider 历史 → 编码时只保留本 provider 的块 |
+| I6 | thinking/provider_blocks 的 provenance 不可跨 provider；`thinkingReplay=replay` 时仅文本可编成目标未签名 reasoning | 语料：混合 provider 历史 → 签名块被过滤；replay 路径只保留文本 |
 | I7 | capability 不支持的 block 在**请求侧**被过滤或显式降级，绝不裸发 | 语料：vision=false + 含图消息 → 图被过滤且有降级记录；document 不支持 → 走 §6 降级格 |
 | I8 | 消息序列经 codec 规范化后满足目标 API 的结构约束（Anthropic 严格交替、相邻 user 合并；Responses 空 content 补占位） | 语料：user→user 相邻序列 → Anthropic 编码输出严格交替 |
 | I9 | model 字段与能力开关分离：`[1m]` 式显示名/后缀绝不泄漏到 wire；能力走 beta header | 语料：contextWindow≥1M → model 字段干净 + betas 含对应 header |
@@ -122,6 +122,8 @@ canoir/
 **OpenAI Responses**
 - 系统提示双模式：`instructions` 顶层字段 vs `input[0]{role:'developer'/'system'}`，代理兼容性优先（A6，`openai-responses.ts:837-857`；实测某些代理会覆盖顶层 `instructions`，`input[role:"system"]` 存活）
 - reasoning item 回放必须保留同 provider 返回的完整原生 item，尤其是 `encrypted_content`；实测仅回放该 item 再追加 user 消息即可延续上一轮推理结果
+- 无同 provider `provider_blocks` 时：`thinkingReplay=replay` 把 IR thinking 文本编成 `{type:'reasoning', content:[{type:'reasoning_text', text}]}`，不得携带外源 signature / encrypted_content；`verify-replay`/`drop` 过滤
+- 结构化 encode 顺序：reasoning → assistant text → `function_call` → `function_call_output`。严格端点把夹在 call 与 output 之间的 assistant 当成缺 output
 - function_call_output 支持 image block 数组
 - thought_signature 类非标准字段必须回传，不得丢弃（C5）
 
@@ -152,7 +154,7 @@ interface ProviderCapability {
 - `document: 'unsupported'` 且无法降级 → **fail-loud**，报出"该 provider 不支持 document"，绝不静默裸发
 - `vision: false` → 请求侧过滤所有 image block + 记录（GLM-5.2 400 实证）
 - `thinkingReplay: 'verify-replay'` → 仅回放带非空 opaque provenance token 的 thinking
-- `thinkingReplay: 'replay'` → 原样回放 thinking，空 token 也合法
+- `thinkingReplay: 'replay'` → 同 provider 原样回放（空 token 合法）；跨 provider 只重写 thinking 文本为未签名 reasoning，不携带外源 token
 - `thinkingReplay: 'drop'` → 丢弃历史 thinking；未知端点默认该档
 - `promptCaching: 'explicit-markers'` → encode 期 cache hint 可翻译为目标 API 的 block 级 breakpoint
 - `promptCaching: 'automatic' | 'none'` → 忽略显式 hint 并记录；这是唯一允许静默降级的 capability 类别，因为只影响性能和计费，不改变请求语义

@@ -207,8 +207,14 @@ interface ProviderCapability {
 `thinkingReplay` 独立描述历史回放策略：
 
 1. `verify-replay`：provider 会校验 provenance token；只有非空 token 的 thinking 可回放。
-2. `replay`：provider 容忍原样回放；空 token thinking 也可回放。
+2. `replay`：provider 容忍未签名回放。同 provider 可原样回放（空 token 也合法）；跨 provider 时只把 thinking **文本**编成目标 API 的未签名 reasoning 形态，不得携带外源 token。
 3. `drop`：回放时丢弃 thinking；未知端点默认使用该档。
+
+Responses 结构化编码（无同 provider `provider_blocks` 时）的 wire 映射：
+
+- `replay`：每个非空 thinking 文本变成 `{ type: 'reasoning', content: [{ type: 'reasoning_text', text }] }`，不含 `id` / `encrypted_content` / 外源 signature。
+- `verify-replay` / `drop`：过滤 thinking 并记录。
+- 结构化 input 顺序必须是 reasoning → assistant text → `function_call` → `function_call_output`。严格端点把夹在 `function_call` 与 `function_call_output` 之间的 assistant 当成缺 output。
 
 Capability 在 codec constructor 中固定。Host 主动改变先验声明时只能通过 `updateCapability()` 显式整体替换；`encode()` 与 `call()` 不接受 per-call capability override。
 
@@ -372,10 +378,17 @@ Codec 必须兼容已验证的三种 wire 形态：原生 object、JSON object �
 
 ### I6 — provider-bound block 不可跨 provider
 
-`thinking` 与 `provider_blocks` 必须携带来源 providerId。编码到目标 provider 时，仅保留 providerId 完全相同的 block；其余 block 过滤并记录。校验器在提供目标 providerId 的上下文中报告 mismatch。
+`thinking` 与 `provider_blocks` 必须携带来源 providerId。编码到目标 provider 时：
 
-- 正例：provider-x 的 thinking 回放给 provider-x，并按 `thinkingReplay` 策略原样保留或丢弃 provenance token 与 block。
-- 反例：provider-x 的签名发送给 provider-y；缺 providerId 的 provider block 被视为可移植。
+- `provider_blocks` 仅当 providerId 完全相同才 verbatim 回放；否则过滤并记录。
+- thinking 的 provenance token（Anthropic `signature`、Responses `encrypted_content`）不得发送给其他 provider。
+- 当目标 `thinkingReplay='replay'` 时，可以把 thinking **文本**编成目标 API 的未签名 reasoning 形态。这不是移植签名块，不得携带外源 token / 外源 item id。
+- `thinkingReplay='verify-replay' | 'drop'` 时，跨 provider 或无可用 token 的 thinking 过滤并记录。
+
+校验器在提供目标 providerId 的上下文中仍报告 mismatch：IR 层 thinking 仍是 provider-bound，跨 provider 合法路径是 encode 期重写文本，不是把原 block 标成可移植。
+
+- 正例：provider-x 的 thinking 回放给 provider-x，并按 `thinkingReplay` 策略原样保留或丢弃 provenance token 与 block。`thinkingReplay='replay'` 时，provider-x 的 thinking 文本编码给 provider-y 变成未签名 `reasoning_text`，不含 x 的 signature。
+- 反例：provider-x 的签名 / `encrypted_content` 发送给 provider-y；缺 providerId 的 provider block 被视为可移植。
 
 ### I7 — 不支持的 block 在请求侧过滤、降级或报错
 
