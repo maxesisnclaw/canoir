@@ -173,6 +173,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+/** IR 空 text 合法；Anthropic / 兼容端点拒绝 `{type:text,text:''}`。 */
+function isEmptyWireText(text: unknown): boolean {
+  return typeof text === 'string' && text.length === 0
+}
+
 function isJsonValue(value: unknown): value is JsonValue {
   if (
     value === null ||
@@ -454,7 +459,7 @@ function encodeDocument(block: DocumentBlock): JsonValue {
 function encodeToolResult(block: ToolResultBlock): JsonValue {
   const content: JsonValue[] = []
   for (const image of block.images ?? []) content.push(encodeImage(image))
-  if (block.content.length > 0 || content.length === 0) {
+  if (block.content.length > 0) {
     content.push({ type: 'text', text: block.content })
   }
 
@@ -521,6 +526,7 @@ function sameProviderRawBlocks(
   let filteredThinking = false
   const blocks = raw.blocks.filter((block) => {
     if (!isRecord(block)) return true
+    if (block.type === 'text' && isEmptyWireText(block.text)) return false
     if (block.type === 'redacted_thinking') {
       const keep = replay !== 'drop'
       if (!keep) filteredThinking = true
@@ -575,7 +581,7 @@ function encodeMessage(
   for (const block of message.content) {
     switch (block.type) {
       case 'text':
-        content.push({ type: 'text', text: block.text })
+        if (!isEmptyWireText(block.text)) content.push({ type: 'text', text: block.text })
         break
       case 'image':
         content.push(encodeImage(block))

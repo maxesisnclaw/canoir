@@ -86,7 +86,7 @@ canoir/
 | I5 | IR 内 arguments 永为 object；wire 上的 string/`arguments` 字段等 3 种形态（A5）解析结果一致 | 语料：同一 tool_call 的三种 wire 形态 → 解码出相同 IR |
 | I6 | thinking/provider_blocks 的 provenance 不可跨 provider；`thinkingReplay=replay` 时仅文本可编成目标未签名 reasoning | 语料：混合 provider 历史 → 签名块被过滤；replay 路径只保留文本 |
 | I7 | capability 不支持的 block 在**请求侧**被过滤或显式降级，绝不裸发 | 语料：vision=false + 含图消息 → 图被过滤且有降级记录；document 不支持 → 走 §6 降级格 |
-| I8 | 消息序列经 codec 规范化后满足目标 API 的结构约束（Anthropic 严格交替、相邻 user 合并；Responses 空 content 补占位） | 语料：user→user 相邻序列 → Anthropic 编码输出严格交替 |
+| I8 | 消息序列经 codec 规范化后满足目标 API 的结构约束（Anthropic 严格交替、相邻 user 合并、省略空 text；Responses 空 content 补占位） | 语料：user→user 相邻序列 → Anthropic 编码输出严格交替；空 text + tool_call → wire 无空 text |
 | I9 | model 字段与能力开关分离：`[1m]` 式显示名/后缀绝不泄漏到 wire；能力走 beta header | 语料：contextWindow≥1M → model 字段干净 + betas 含对应 header |
 | I10 | 退化响应五类可检测：max_tokens 截断、refusal partial、runaway thinking（无 text 无 tool 且 thinking 超预算）、空响应、流式组装丢字段 | 语料：五类各至少一条真实录制的 SSE 流 → 检测器全部命中；空响应绝不进入可回放历史 |
 | I11 | 400 诊断可回放：codec 支持把出站请求 body 落盘，供事后回放定位 | 单测：开启诊断模式后请求 body 完整落盘且可重新编码 |

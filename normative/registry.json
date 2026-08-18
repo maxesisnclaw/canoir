@@ -141,6 +141,8 @@
         "cache-502-anthropic-message-boundary.json",
         "structure-101-anthropic-merge-users.json",
         "structure-102-anthropic-tool-result-image.json",
+        "structure-103-anthropic-omit-empty-text.json",
+        "structure-104-anthropic-omit-empty-text-raw.json",
         "thinking-101-anthropic-interleaved-replay.json",
         "thinking-102-anthropic-redacted-replay.json",
         "thinking-102-anthropic-off-disabled.json"

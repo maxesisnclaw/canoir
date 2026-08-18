@@ -1,0 +1,58 @@
+{
+  "name": "Anthropic 同 provider raw 回放省略空 text block",
+  "category": "structure",
+  "operation": "anthropic-encode",
+  "input": {
+    "config": {
+      "providerId": "provider-x",
+      "model": "model-a",
+      "endpoint": "https://endpoint-a.example/v1/messages",
+      "apiKey": "test-key",
+      "compatMode": "minimal"
+    },
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "start" }] },
+      {
+        "role": "assistant",
+        "content": [
+          {
+            "type": "provider_blocks",
+            "providerId": "provider-x",
+            "blocks": [
+              { "type": "text", "text": "" },
+              { "type": "tool_use", "id": "call-1", "name": "lookup", "input": {} }
+            ]
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": [{ "type": "tool_result", "toolCallId": "call-1", "content": "ok" }]
+      }
+    ]
+  },
+  "expected": {
+    "model": "model-a",
+    "max_tokens": 32000,
+    "messages": [
+      { "role": "user", "content": [{ "type": "text", "text": "start" }] },
+      {
+        "role": "assistant",
+        "content": [
+          { "type": "tool_use", "id": "call-1", "name": "lookup", "input": {} }
+        ]
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "tool_result",
+            "tool_use_id": "call-1",
+            "content": [{ "type": "text", "text": "ok" }]
+          }
+        ]
+      }
+    ],
+    "stream": true
+  }
+}

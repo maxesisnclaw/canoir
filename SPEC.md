@@ -62,7 +62,7 @@ interface TextBlock {
 }
 ```
 
-空串合法，语义为“明确没有文本”，不得擅自改写为空格或占位文案。
+空串合法，语义为“明确没有文本”，不得擅自改写为空格或占位文案。编码到拒绝空 text 的目标 API（Anthropic Messages 及其兼容端点）时必须省略该 block；省略后消息 content 为空则丢弃该消息。
 
 #### thinking
 
@@ -399,10 +399,10 @@ Codec 必须在构造 wire body 时执行 capability 门控，不能依赖 provi
 
 ### I8 — 目标 API 结构约束必须成立
 
-正规化后的 wire 消息必须满足目标 API 的序列规则。Anthropic 输出严格 user/assistant 交替，相邻 user 内容合并，tool result 归入 user 内容；OpenAI Responses 不接受空 content 的位置必须补 API 允许的最小占位。
+正规化后的 wire 消息必须满足目标 API 的序列规则。Anthropic 输出严格 user/assistant 交替，相邻 user 内容合并，tool result 归入 user 内容；IR 中合法的空 text 不得编成 `{type:text,text:''}`，必须省略该 block，省略后 content 为空则丢弃该消息；OpenAI Responses 不接受空 content 的位置必须补 API 允许的最小占位。
 
-- 正例：IR 中两个连续 tool 消息编码为一个 Anthropic user message，包含两个 tool_result block。
-- 反例：Anthropic wire 出现连续 user 消息；Responses 输出不允许的空 input item。
+- 正例：IR 中两个连续 tool 消息编码为一个 Anthropic user message，包含两个 tool_result block。assistant 仅有空 text + tool_call 时 wire 只含 tool_use。
+- 反例：Anthropic wire 出现连续 user 消息；Anthropic wire 出现空 text block；Responses 输出不允许的空 input item。
 
 ### I9 — model 与能力开关分离
 
